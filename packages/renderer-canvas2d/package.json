@@ -1,0 +1,26 @@
+{
+  "name": "@engine/renderer-canvas2d",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The from-scratch Canvas2D reference backend — a few hundred readable lines, itself a teaching artifact (ctx.setTransform IS the 2×3 affine matrix from class), and the works-on-any-school-machine fallback.",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engine/math": "workspace:*",
+    "@engine/renderer": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

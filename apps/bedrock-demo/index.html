@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bedrock demo — deterministic profile-view scene</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --line: light-dark(#d8e0ec, #263349);
+        --ink: light-dark(#182435, #e4eaf4);
+        --bg: light-dark(#f7f9fc, #0d131e);
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        display: flex;
+        flex-direction: column;
+        height: 100dvh;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+        flex-wrap: wrap;
+      }
+      button, select {
+        font: inherit;
+        padding: 4px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      button:hover { border-color: #2f62d6; }
+      #status { margin-left: auto; opacity: 0.7; }
+      .stage { flex: 1; min-height: 0; }
+      canvas { display: block; width: 100%; height: 100%; }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <button id="btn-pause">Pause</button>
+      <button id="btn-step-tick" title="Run exactly one fixed tick">Step tick</button>
+      <button id="btn-step-substage" title="Run the next stage of the current tick">Step substage</button>
+      <select id="time-scale" title="Time scale">
+        <option value="0.25">0.25×</option>
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+      </select>
+      <button id="btn-reset">Reset</button>
+      <span id="status"></span>
+    </div>
+    <div class="stage"><canvas id="viewport"></canvas></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

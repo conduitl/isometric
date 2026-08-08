@@ -1,0 +1,22 @@
+{
+  "name": "@engine/testkit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared test infrastructure: stable serialization and replay hashing — the machinery behind the determinism CI gate (same seed + same inputs → byte-identical worlds).",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

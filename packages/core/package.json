@@ -1,0 +1,25 @@
+{
+  "name": "@engine/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The glass-box kernel. Phase 0 ships the deterministic Clock (fixed timestep, pause/step-tick/step-substage); the EC world store, scheduler, and events arrive in Phase 1.",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engine/math": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

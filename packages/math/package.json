@@ -1,0 +1,22 @@
+{
+  "name": "@engine/math",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Literate 2D math: vectors, affine matrices, scalar helpers, seeded randomness. This package is curriculum — every exported function carries its derivation.",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

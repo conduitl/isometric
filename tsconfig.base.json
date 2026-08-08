@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@engine/math": ["packages/math/src/index.ts"],
+      "@engine/core": ["packages/core/src/index.ts"],
+      "@engine/renderer": ["packages/renderer/src/index.ts"],
+      "@engine/renderer-canvas2d": ["packages/renderer-canvas2d/src/index.ts"],
+      "@engine/testkit": ["packages/testkit/src/index.ts"]
+    }
+  }
+}

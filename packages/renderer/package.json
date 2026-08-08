@@ -1,0 +1,25 @@
+{
+  "name": "@engine/renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The owned thin renderer interface: screen-space draw commands in, pixels out. Includes the null headless backend (records commands for tests) and canvas lifecycle helpers. All curriculum math lives above this line.",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engine/math": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

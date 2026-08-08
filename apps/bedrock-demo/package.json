@@ -1,0 +1,24 @@
+{
+  "name": "bedrock-demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Phase 0 exit deliverable: a deterministic bouncing ball + moving platform in profile view, with vector overlays and pause/step controls — the integration proof for math, clock, and renderer.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engine/core": "workspace:*",
+    "@engine/math": "workspace:*",
+    "@engine/renderer": "workspace:*",
+    "@engine/renderer-canvas2d": "workspace:*"
+  },
+  "devDependencies": {
+    "@engine/testkit": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

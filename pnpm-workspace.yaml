@@ -1,0 +1,17 @@
+packages:
+  - packages/*
+  - apps/*
+
+# One place to pin shared tool versions (pnpm catalog).
+# TypeScript is pinned to the 5.9 line deliberately: the 7.x native port is out but the
+# ecosystem seams we depend on (typescript-eslint, tsdown dts) are proven on 5.x.
+# Upgrading to TS 7 is a recorded chore, not an accident — see docs/DECISIONS.md.
+catalog:
+  '@changesets/cli': ^2.31.1
+  '@types/node': ^26.2.0
+  eslint: ^10.8.1
+  tsdown: ^0.22.14
+  typescript: ~5.9.3
+  typescript-eslint: ^8.66.0
+  vite: ^8.2.1
+  vitest: ^4.1.10
