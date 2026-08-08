@@ -334,3 +334,18 @@ describe('determinism', () => {
     expect(runs).toBe(clock.tick)
   })
 })
+
+describe('review regressions: NaN quarantine', () => {
+  it('advance(NaN) runs zero ticks and does not poison the accumulator', () => {
+    const clock = createClock({ fixedDt: 1 / 60 })
+    const log: string[] = []
+    const stages = recordingStages(['sim'], log)
+
+    expect(clock.advance(Number.NaN, stages)).toBe(0)
+    expect(Number.isFinite(clock.alpha)).toBe(true)
+
+    // The clock still works afterwards — one fixedDt deposit runs one tick.
+    expect(clock.advance(1 / 60, stages)).toBe(1)
+    expect(clock.tick).toBe(1)
+  })
+})

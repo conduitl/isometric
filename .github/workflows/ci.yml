@@ -21,4 +21,7 @@ jobs:
       # The suite includes the replay-hash determinism tests (run-twice-compare),
       # the Phase 0 exit proof that the same seed + inputs give identical worlds.
       - run: pnpm test
-      - run: pnpm build
+      # Docs build is a RELEASE gate, not a merge gate (docs/DECISIONS.md R9).
+      # Visual tests (pnpm test:visual) run on a pinned local Chromium; wiring them
+      # into CI needs linux baselines blessed from a CI artifact — a recorded chore.
+      - run: pnpm -r --filter '!docs' run build

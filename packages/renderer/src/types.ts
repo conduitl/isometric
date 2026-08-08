@@ -76,10 +76,12 @@ export interface CircleCmd {
  * workhorse of overlays: grids, arrows, graphs, selection outlines — anything
  * you would sketch with a ruler.
  *
- * With `closed: true` the last point connects back to the first, turning the
- * chain into a polygon; `fill` then paints its inside. `stroke` draws the
- * segments themselves. Fewer than two points means there is no segment to
- * draw, so the command is a no-op.
+ * `stroke` draws the segments; `closed: true` adds one more stroked segment
+ * from the last point back to the first. `fill` always paints the interior
+ * of the polygon as if the chain were closed (the fill implicitly closes an
+ * open chain — the same rule SVG uses), whether or not `closed` is set.
+ * Fewer than two points means there is no segment to draw, so the command
+ * is a no-op.
  */
 export interface PolylineCmd {
   readonly points: readonly Vec2[]

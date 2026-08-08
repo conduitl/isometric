@@ -191,3 +191,25 @@ describe('Vec2.equals', () => {
     expect(Vec2.equals(Vec2.make(1, 1), Vec2.make(1, 1.01), 0.1)).toBe(true)
   })
 })
+
+describe('review regressions: shared constants and negative zero', () => {
+  it('normalize(zero) returns a FRESH vector, never the shared Vec2.zero', () => {
+    expect(Vec2.normalize(Vec2.make(0, 0))).not.toBe(Vec2.zero)
+    expect(Vec2.normalize(Vec2.zero)).not.toBe(Vec2.zero)
+  })
+
+  it('Vec2.zero is frozen so accidental mutation throws instead of corrupting the engine', () => {
+    expect(Object.isFrozen(Vec2.zero)).toBe(true)
+    expect(() => {
+      ;(Vec2.zero as { x: number }).x = 1
+    }).toThrow()
+    expect(Vec2.zero).toEqual({ x: 0, y: 0 })
+  })
+
+  it('angleOf keeps its (−π, π] promise for the −0 components neg() and perp() produce', () => {
+    // neg(unitX) is {x:-1, y:-0}; raw atan2(−0, −1) would be −π.
+    expect(Vec2.angleOf(Vec2.neg(Vec2.make(1, 0)))).toBe(Math.PI)
+    expect(Vec2.angleOf(Vec2.perp(Vec2.perp(Vec2.make(1, 0))))).toBe(Math.PI)
+    expect(Vec2.angleOf(Vec2.make(-1, 0))).toBe(Math.PI)
+  })
+})

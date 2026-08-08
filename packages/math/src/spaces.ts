@@ -32,9 +32,11 @@
 import type { Vec2 } from './vec2'
 
 // Declared but never defined: this symbol exists only in the type system.
-// Nobody can construct the brand property at runtime, which is exactly what
-// keeps the brands honest — the ONLY way to tag a vector is through the
-// as* functions below (or a transform helper that returns tagged output).
+// Nobody can construct the brand property at runtime — the tag cannot be
+// forged, only asserted in types. Because the tag is OPTIONAL by design, a
+// plain Vec2 (or a literal in an annotated position) fits any space; what
+// the brands reject is a vector already tagged with one space crossing into
+// another without an explicit, named conversion.
 declare const SpaceTag: unique symbol
 
 /** A Vec2 in WORLD space: y-up, measured in meters, origin at the world's anchor. */
@@ -49,8 +51,13 @@ export type TileVec = Vec2 & { readonly [SpaceTag]?: 'tile' }
 /**
  * Assert "this vector is in world space." Pure type-level paint — returns
  * the same object, costs nothing at runtime. Use it at the boundary where a
- * vector's space becomes known (e.g. right after building a spawn point),
- * so the compiler can police every step after that.
+ * vector's space becomes known (e.g. right after building a spawn point).
+ *
+ * Honest scope: brands police BOUNDARIES — assignments and function
+ * signatures — not arithmetic. Every Vec2/Mat3 operation returns an
+ * unbranded Vec2, so the first add/scale/lerp washes the paint off; re-tag
+ * the result where its space matters. Dev-build runtime space tags
+ * (docs/ARCHITECTURE.md §8) are the planned runtime complement.
  */
 export const asWorld = (v: Vec2): WorldVec => v
 

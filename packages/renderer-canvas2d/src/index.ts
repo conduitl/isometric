@@ -163,10 +163,11 @@ export function createCanvas2dBackend(canvas: HTMLCanvasElement): RendererBacken
     /**
      * A polyline is connect-the-dots: pen down at the first point (moveTo),
      * straight segment to each following point (lineTo). `closed` adds the
-     * segment from the last point back to the first, turning the chain into
-     * a polygon — which is when `fill` starts meaning something. As with
-     * rects, fill before stroke so the outline stays fully visible.
-     * An empty point list means there is nothing to trace; we bail early.
+     * return segment to the STROKE; `fill` always treats the chain as a
+     * polygon, open or not — canvas's fill() implicitly closes the path,
+     * exactly like SVG. As with rects, fill before stroke so the outline
+     * stays fully visible. An empty point list means there is nothing to
+     * trace; we bail early.
      */
     drawPolyline(cmd: PolylineCmd): void {
       ctx.beginPath()

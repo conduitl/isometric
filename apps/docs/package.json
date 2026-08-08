@@ -1,0 +1,16 @@
+{
+  "name": "docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Docs site skeleton (Astro Starlight). Grows into the executable curriculum in Phase 3: live demos importing the real @engine/* packages. Build is a RELEASE gate, not a merge gate (docs/DECISIONS.md R9).",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.41.7",
+    "astro": "^7.2.0"
+  }
+}

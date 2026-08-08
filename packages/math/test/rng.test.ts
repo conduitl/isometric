@@ -115,3 +115,22 @@ describe('createRng seed handling', () => {
     expect(rng.next()).not.toBe(first)
   })
 })
+
+describe('review regressions: int() honors its contract for non-integer bounds', () => {
+  it('int(0.5, 2.5) only ever returns the integers actually inside [0.5, 2.5)', () => {
+    const rng = createRng(7)
+    for (let i = 0; i < 1000; i++) {
+      const n = rng.int(0.5, 2.5)
+      expect(n === 1 || n === 2).toBe(true)
+    }
+  })
+
+  it('integer bounds produce the exact same seeded stream as before the fix', () => {
+    // ceil() is the identity on integers, so this pins bit-compatibility.
+    const a = createRng(12345)
+    const b = createRng(12345)
+    for (let i = 0; i < 200; i++) {
+      expect(a.int(1, 7)).toBe(Math.floor(1 + b.next() * 6))
+    }
+  })
+})

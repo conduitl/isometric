@@ -26,7 +26,7 @@ const trigBans = ['sin', 'cos', 'tan', 'atan2', 'atan', 'asin', 'acos'].map((fn)
 }))
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**'] },
+  { ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/.astro/**', '**/.vitest-attachments/**'] },
   ...tseslint.configs.recommended,
   {
     files: ['packages/*/src/**/*.ts', 'apps/*/src/**/*.ts'],

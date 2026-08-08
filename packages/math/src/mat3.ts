@@ -27,8 +27,10 @@
  * These are the SAME six numbers, in the SAME order, that the browser's
  * canvas takes in ctx.setTransform(a, b, c, d, tx, ty). When the renderer
  * calls setTransform it is literally handing the browser one of these
- * matrices and letting the GPU do the multiplying. Nothing about canvas
- * transforms is magic — it's this file, running in C++.
+ * matrices, and the browser's native code multiplies every point drawn
+ * afterwards by it (on the CPU or the GPU — that varies by browser and
+ * content). Nothing about canvas transforms is magic — it's the same math
+ * as this file, implemented in C++.
  */
 
 import { cos, sin } from './scalar'
@@ -60,7 +62,7 @@ export const Mat3 = {
    * composing with it changes nothing — it is the "1" of matrix
    * multiplication, and the natural starting point for building up chains.
    */
-  identity: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 } as Mat3,
+  identity: Object.freeze({ a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }) as Mat3,
 
   /**
    * A pure shift: every point moves by (tx, ty), nothing rotates or
@@ -198,16 +200,22 @@ export const Mat3 = {
    * through the inverted linear part, giving (c·ty − d·tx)/det and
    * (b·tx − a·ty)/det.
    *
-   * Returns null when |det| < 10⁻¹²: a determinant of (nearly) zero means
-   * the transform collapsed a dimension — the whole plane got flattened onto
-   * a line. Many points now share each output, so there is no way to know
-   * which one you came from. A collapsed dimension can't be undone; the
-   * information is gone, and null says so honestly instead of returning a
-   * matrix full of division-by-almost-zero garbage.
+   * Returns null when the transform (nearly) collapsed the plane onto a
+   * line. The test is scale-aware, and the quantity it measures is worth
+   * knowing: det = |col₁|·|col₂|·sin(angle between the columns), so dividing
+   * |det| by the column lengths leaves exactly that sine. Near zero means the
+   * two basis vectors landed pointing (almost) the same way — a genuine
+   * flattening — regardless of how big or small the matrix is. (A tiny
+   * uniform zoom has a tiny determinant but is perfectly undoable, which is
+   * why comparing |det| against a fixed cutoff would be wrong.) When the
+   * plane collapses, many points share each output, there is no way to know
+   * which one you came from, and null says so honestly instead of returning
+   * a matrix full of division-by-almost-zero garbage.
    */
   invert(m: Mat3): Mat3 | null {
     const det = m.a * m.d - m.b * m.c
-    if (Math.abs(det) < 1e-12) return null
+    const colScale = Math.hypot(m.a, m.b) * Math.hypot(m.c, m.d)
+    if (Math.abs(det) <= 1e-12 * colScale) return null
     return {
       a: m.d / det,
       b: -m.b / det,

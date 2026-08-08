@@ -227,3 +227,23 @@ describe('the worldToScreen pattern (the y-flip lesson, end to end)', () => {
     }
   })
 })
+
+describe('review regressions: frozen identity and scale-aware invert', () => {
+  it('Mat3.identity is frozen', () => {
+    expect(Object.isFrozen(Mat3.identity)).toBe(true)
+  })
+
+  it('inverts a tiny uniform zoom (small determinant is not a collapsed plane)', () => {
+    const tiny = Mat3.scaling(5e-7, 5e-7)
+    const inv = Mat3.invert(tiny)
+    expect(inv).not.toBeNull()
+    expect(Mat3.equals(Mat3.compose(inv as Mat3, tiny), Mat3.identity, 1e-9)).toBe(true)
+  })
+
+  it('still refuses genuinely collapsed planes, at any scale', () => {
+    expect(Mat3.invert(Mat3.scaling(0, 0))).toBeNull()
+    expect(Mat3.invert(Mat3.make(2, 4, 1, 2, 5, 5))).toBeNull() // parallel columns
+    // Huge entries, columns nearly parallel: det = 1e-3 but sine ≈ 1e-15.
+    expect(Mat3.invert(Mat3.make(1e6, 1, 1e6, 1 + 1e-9, 0, 0))).toBeNull()
+  })
+})

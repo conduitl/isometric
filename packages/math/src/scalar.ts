@@ -109,7 +109,10 @@ export function tan(x: number): number {
 
 /**
  * The angle of the point (x, y) measured counterclockwise from the positive
- * x-axis, in radians in (−π, π].
+ * x-axis, in radians in [−π, π] — note BOTH ends included: IEEE atan2
+ * distinguishes negative zero, so atan2(−0, x) with x < 0 returns exactly −π
+ * while atan2(+0, x) returns +π. (Vec2.angleOf canonicalizes −0 away and so
+ * genuinely returns (−π, π]; this raw wrapper stays bit-faithful to Math.atan2.)
  *
  * Why two arguments instead of atan(y/x)? Because y/x throws away which
  * quadrant you are in: (1, 1) and (−1, −1) have the same ratio but point in

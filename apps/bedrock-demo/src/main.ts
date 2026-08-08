@@ -108,7 +108,15 @@ function frame(now: number): void {
 
   clock.advance(realDt, sim.stages)
 
-  renderScene(backend, surface.size(), sim.state, clock.alpha, {
+  // While paused we draw at alpha = 1 — the exact state the HUD prints —
+  // instead of the clock's leftover accumulator fraction, which would show
+  // the ball up to a full tick BEHIND the numbers. Freeze-and-inspect must
+  // never contradict itself. Accepted tradeoff: the picture snaps forward by
+  // up to one tick's displacement at the instant of pausing (and back on
+  // resume, when interpolation takes over again).
+  const drawAlpha = clock.paused ? 1 : clock.alpha
+
+  renderScene(backend, surface.size(), sim.state, drawAlpha, {
     tick: clock.tick,
     paused: clock.paused,
     pendingStage: clock.pendingStage,
@@ -120,7 +128,7 @@ function frame(now: number): void {
       ? `paused · next ${clock.pendingStage}`
       : 'paused'
     : 'running'
-  statusEl.textContent = `tick ${clock.tick} · α ${clock.alpha.toFixed(2)} · ${clock.timeScale}× · ${runState}`
+  statusEl.textContent = `tick ${clock.tick} · α ${drawAlpha.toFixed(2)} · ${clock.timeScale}× · ${runState}`
 
   requestAnimationFrame(frame)
 }

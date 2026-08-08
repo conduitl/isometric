@@ -6,10 +6,13 @@
  * 2 up"). The same arithmetic serves both, which is why one type covers both.
  *
  * Design notes:
- * - Vectors are plain frozen-shape readonly objects, never mutated. Every
- *   operation returns a NEW vector. That makes code easier to reason about
- *   (nobody can change your vector behind your back) and is essential for
- *   deterministic replays.
+ * - Vectors are plain readonly objects, never mutated: every operation
+ *   returns a NEW vector. Honesty note: `readonly` is a promise the COMPILER
+ *   enforces on code, not one JavaScript enforces at runtime — the console
+ *   can still mutate a vector, which is exactly why engine code never does.
+ *   The shared constants (Vec2.zero, Mat3.identity) ARE frozen for real with
+ *   Object.freeze, so mutating those throws instead of silently corrupting
+ *   every later computation. Immutability is what makes replays deterministic.
  * - `Vec2` is both a TypeScript interface (the shape) and a const object (the
  *   toolbox of functions). TypeScript merges the two declarations, so you can
  *   write `const v: Vec2 = Vec2.make(1, 2)` — one name, two facets.
@@ -36,8 +39,10 @@ export const Vec2 = {
   /**
    * The zero vector (0, 0): the origin as a position, "don't move" as a
    * displacement. It is the identity for addition — adding it changes nothing.
+   * Frozen at runtime: this one object is shared engine-wide, so mutating it
+   * would corrupt every later computation — Object.freeze makes that throw.
    */
-  zero: { x: 0, y: 0 } as Vec2,
+  zero: Object.freeze({ x: 0, y: 0 }) as Vec2,
 
   /**
    * Add component-wise: (a.x + b.x, a.y + b.y).
@@ -147,12 +152,14 @@ export const Vec2 = {
    *
    * The zero vector has no direction and dividing 0/0 would give NaN, which
    * silently poisons every calculation it touches. Our documented choice:
-   * normalize(zero) = zero. Callers who need to detect the degenerate case
-   * can check for a zero result; nobody gets NaN by surprise.
+   * normalize(zero) = a fresh (0, 0). Callers who need to detect the
+   * degenerate case can check for a zero result; nobody gets NaN by surprise.
+   * (A fresh object, not the shared Vec2.zero constant — every operation
+   * returns a NEW vector, with no exceptions.)
    */
   normalize(v: Vec2): Vec2 {
     const len = Math.sqrt(v.x * v.x + v.y * v.y)
-    if (len === 0) return Vec2.zero
+    if (len === 0) return { x: 0, y: 0 }
     return { x: v.x / len, y: v.y / len }
   },
 
@@ -175,9 +182,15 @@ export const Vec2 = {
    * x-axis, in radians in (−π, π]. This is atan2(y, x) — see Scalar.atan2 for
    * why atan2 beats atan(y/x): it keeps quadrant information and never
    * divides by zero. Inverse of fromAngle (up to full turns).
+   *
+   * The `v.y + 0` below erases IEEE negative zero (−0 + 0 = +0; every other
+   * number is unchanged). Without it, vectors manufactured by neg() or perp()
+   * can carry y = −0, and raw atan2(−0, −1) returns −π — the same direction
+   * as +π but outside our promised interval. One tiny addition keeps the
+   * (−π, π] promise true no matter where the vector came from.
    */
   angleOf(v: Vec2): number {
-    return atan2(v.y, v.x)
+    return atan2(v.y + 0, v.x)
   },
 
   /**

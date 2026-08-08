@@ -217,6 +217,10 @@ export function createClock(options: ClockOptions = {}): Clock {
 
     advance(realDtSeconds: number, stages: readonly Stage[]): number {
       if (paused) return 0
+      // NaN never leaves quarantine: NaN survives min/max clamping, and one
+      // poisoned deposit would leave the accumulator NaN forever — a clock
+      // that silently never ticks again. Refuse the deposit instead.
+      if (Number.isNaN(realDtSeconds)) return 0
 
       // Clamp the deposit: negative time does not exist, and anything above
       // MAX_REAL_DT means the tab slept — see the file header.

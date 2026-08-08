@@ -132,13 +132,19 @@ export function createSim(seed = 12345): { state: SimState; stages: readonly Sta
        *   vel += GRAVITY · dt      (update velocity FIRST)
        *   pos += vel · dt          (then move using the NEW velocity)
        *
-       * Plain Euler moves with the OLD velocity, which systematically lags
-       * behind the true curve and injects a little energy every step — a
-       * plain-Euler ball bounces slightly HIGHER each time, a perpetual
-       * motion bug. Updating velocity first makes the errors alternate sign
-       * instead of piling up, so the total energy stays bounded. Same cost,
-       * one line swapped, dramatically more stable — which is why nearly
-       * every game engine integrates in this order.
+       * Under constant gravity the two orders err in opposite directions,
+       * by the same tiny amount each step (½·g²·dt² worth of energy): plain
+       * Euler moves with the OLD velocity and systematically ADDS energy,
+       * semi-implicit moves with the NEW velocity and systematically SHEDS
+       * it. Adding is the dangerous direction. With our 0.85-bouncy ball,
+       * plain Euler's per-flight energy gain balances the per-bounce loss,
+       * so the ball never settles — it jitters in a small perpetual bounce
+       * forever — while the semi-implicit ball honestly comes to rest.
+       * (For oscillating systems like springs, semi-implicit has the deeper
+       * virtue of keeping energy errors BOUNDED instead of compounding —
+       * that story arrives with @engine/physics-lite.) Same cost, one line
+       * swapped, dramatically more stable — which is why nearly every game
+       * engine integrates in this order.
        *
        * We stash prevPos before moving: the renderer interpolates between
        * the last two positions to draw smoothly between fixed ticks.

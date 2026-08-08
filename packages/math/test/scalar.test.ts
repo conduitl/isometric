@@ -121,3 +121,10 @@ describe('Scalar trig wrappers', () => {
     }
   })
 })
+
+describe('review regressions: atan2 stays a bit-faithful IEEE pass-through', () => {
+  it('atan2(−0, −1) is exactly −π — the raw wrapper does NOT canonicalize (Vec2.angleOf does)', () => {
+    expect(Scalar.atan2(-0, -1)).toBe(-Math.PI)
+    expect(Scalar.atan2(0, -1)).toBe(Math.PI)
+  })
+})

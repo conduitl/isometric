@@ -84,9 +84,15 @@ export function createRng(seed: number): Rng {
       return min + next() * (max - min)
     },
     int(minInclusive: number, maxExclusive: number): number {
-      // next() < 1 strictly, so the scaled value sits below maxExclusive and
-      // flooring lands in [minInclusive, maxExclusive - 1].
-      return Math.floor(minInclusive + next() * (maxExclusive - minInclusive))
+      // The integers inside [min, max) are exactly [ceil(min), ceil(max)) —
+      // e.g. [0.5, 2.5) contains the integers {1, 2} = [1, 3). Working from
+      // the ceilings makes the contract hold for ANY bounds, and when both
+      // bounds are already integers the ceilings change nothing, so seeded
+      // streams are identical to the plain formula. next() < 1 strictly, so
+      // flooring lands in [lo, hi - 1].
+      const lo = Math.ceil(minInclusive)
+      const hi = Math.ceil(maxExclusive)
+      return Math.floor(lo + next() * (hi - lo))
     },
   }
 }
