@@ -211,6 +211,37 @@ export function createCanvas2dBackend(canvas: HTMLCanvasElement): RendererBacken
     },
 
     /**
+     * The blit: copy pixels that already exist. This is the other half of
+     * the caching lesson — every other command above PAYS for its geometry
+     * on every call (path building, filling, rasterizing), while drawImage
+     * just copies a rectangle of finished pixels. A tile layer rendered once
+     * into an offscreen canvas can be stamped onto the frame each frame for
+     * (almost) free, at any scale — that stamp is this call.
+     *
+     * Canvas gives the operation two shapes and we use both. The 4-argument
+     * form copies the WHOLE source into the dest rect; the 8-argument form
+     * first crops a window out of the source (sx, sy, sw, sh — in the
+     * source's own pixels) and stretches that window into the dest rect. A
+     * crop is only meaningful as a complete rectangle, so we switch on all
+     * four fields being present. Either way the dest rect runs through the
+     * frame's transform like everything else, so callers keep thinking in
+     * CSS pixels. `cmd.label` is for logs and replay hashes — the pixels
+     * don't need it, so it is (correctly) unused here.
+     */
+    drawImage(cmd): void {
+      if (
+        cmd.sx !== undefined &&
+        cmd.sy !== undefined &&
+        cmd.sw !== undefined &&
+        cmd.sh !== undefined
+      ) {
+        ctx.drawImage(cmd.source, cmd.sx, cmd.sy, cmd.sw, cmd.sh, cmd.dx, cmd.dy, cmd.dw, cmd.dh)
+      } else {
+        ctx.drawImage(cmd.source, cmd.dx, cmd.dy, cmd.dw, cmd.dh)
+      }
+    },
+
+    /**
      * Nothing to do: Canvas2D is immediate-mode, meaning every draw call
      * above already landed on the canvas by the time it returned. The method
      * exists because the INTERFACE needs it — a batching backend queues work

@@ -116,7 +116,13 @@ The three built-ins:
 |---|---|---|---|
 | Profile | `[[s, 0], [0, 0]]` (rank-deficient: y collapses to lanes) | `(0, −s)` | Functions as terrain (`y = f(x)`), slope, parabolas, gravity |
 | Top-down | `s·[[1, 0], [0, −1]]` (the y-flip, taught) | `(0, 0)` (shadow/scale optional) | Cartesian coordinates, distance-as-Pythagoras, vectors, angles |
-| Iso 2:1 dimetric | `[[tileW/2, −tileW/2], [tileH/2, tileH/2]]`, `tileW = 2·tileH` | `(0, −zScale)` | Linear maps, basis vectors, 2×2 inversion, why exact halves beat true 30° isometric |
+| Iso 2:1 dimetric | east → `(tileW/2, tileH/2)`, north → `(tileW/2, −tileH/2)` (i.e. `screen = ((x+y)·tileW/2, (x−y)·tileH/2)`), `tileW = 2·tileH` | `(0, −zScale)` | Linear maps, basis vectors, 2×2 inversion, why exact halves beat true 30° isometric |
+
+The iso camera looks from the **south-east** (matching profile's south-facing camera), chosen so the
+world keeps the same winding in every view — iso's determinant carries the same sign as top-down's,
+so a kid's map is never mirror-reversed between the two primary windows (decision register D7; the
+classic games formula `(x−y, x+y)` assumes y-south screen-style coordinates and silently mirrors a
+y-north world).
 
 - **Picking is the inverse, with an honest twist.** A 2D click cannot determine three world numbers,
   so `inverse(screen, constraint)` is parameterized — by the ground plane `z = 0` by default, by a
@@ -126,7 +132,8 @@ The three built-ins:
   (`det = tileW·tileH/2`). Picking through stacked elevations iterates candidate z-bands top-down,
   and **every placement tool shows a live hover ghost at the resolved cell/elevation** so "where
   will my click land?" is always visible.
-- **Depth sorting** is a stable painter's sort keyed `(layerBand, x + y + z, entityId)`. v1
+- **Depth sorting** is a stable painter's sort keyed `(layerBand, x − y + z, entityId)` (the
+  south-east camera's ordering relation: farther east and farther south is closer). v1
   restricts entities to 1-tile footprints, sidestepping the classic multi-tile anomaly; Phase 5 adds
   explicit `sortAnchor` components and footprint splitting, with the anomaly documented as the
   lesson that 2.5D is a projection, not a geometry.
@@ -280,7 +287,7 @@ The concept-to-perspective staircase falls out of the projection model: profile 
 slope, and parabolas; top-down teaches coordinates, Pythagoras-as-distance, normalization ("why is
 diagonal faster?"), atan2; iso is the linear-algebra classroom (basis vectors visible as "where one
 world-step east lands on screen", picking as 2×2 inversion, depth as the ordering relation
-`x + y + z`) — with vectors, distance, and lerp deliberately recurring across all three to teach
+`x − y + z`) — with vectors, distance, and lerp deliberately recurring across all three to teach
 invariance.
 
 ## 9. The tutorial system

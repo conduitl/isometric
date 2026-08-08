@@ -21,11 +21,15 @@
  * Commands are recorded verbatim — each entry is the command object spread
  * into a new object with a `kind` tag added, nothing normalized, nothing
  * defaulted. If a field was omitted by the caller it is absent from the
- * record too, so the log is exactly what crossed the seam.
+ * record too, so the log is exactly what crossed the seam. The single
+ * exception is drawImage, whose `source` is a live browser object rather
+ * than plain data — its record carries the caller's `label` instead (see
+ * the comment on drawImage below).
  */
 
 import type {
   CircleCmd,
+  ImageCmd,
   PolylineCmd,
   RectCmd,
   RendererBackend,
@@ -100,6 +104,30 @@ export function createNullBackend(): NullBackend {
 
     drawText(cmd: TextCmd): void {
       record({ kind: 'text', ...cmd })
+    },
+
+    /**
+     * The one command NOT spread verbatim: `source` is a live browser object
+     * (a canvas, a bitmap) — recording it would poison the log, which must
+     * stay plain JSON so replay tests can hash it. The caller-chosen `label`
+     * stands in for the pixels; every other field of the blit is an honest
+     * number. Source-rect fields are copied only when the caller passed
+     * them, keeping the omitted-means-absent rule intact.
+     */
+    drawImage(cmd: ImageCmd): void {
+      const entry: Record<string, unknown> = {
+        kind: 'image',
+        label: cmd.label,
+        dx: cmd.dx,
+        dy: cmd.dy,
+        dw: cmd.dw,
+        dh: cmd.dh,
+      }
+      if (cmd.sx !== undefined) entry.sx = cmd.sx
+      if (cmd.sy !== undefined) entry.sy = cmd.sy
+      if (cmd.sw !== undefined) entry.sw = cmd.sw
+      if (cmd.sh !== undefined) entry.sh = cmd.sh
+      record(entry)
     },
 
     endFrame(): void {

@@ -57,6 +57,12 @@
  * `stepSubstage` runs one *stage* of a slice (e.g. just 'integrate', not yet
  * 'collide') so you can watch the vectors change mid-tick. That interaction is
  * the reason this file exists.
+ *
+ * One rule keeps hand-stepping honest: the moment a tick's first substage
+ * runs, the Clock snapshots the stage list it was given, and the rest of that
+ * tick runs from the snapshot. A system added mid-tick appears at the start
+ * of the NEXT tick — never spliced into (or shifted around inside) the one in
+ * flight.
  */
 
 /**
@@ -94,6 +100,12 @@ export interface ClockOptions {
  * i.e. the `t` you pass to `lerp(prevPos, pos, t)` when rendering;
  * `pendingStage` names the next stage of a half-finished tick while you are
  * substage-stepping, and is null whenever no tick is mid-flight.
+ *
+ * `setFixedDt` re-sizes the simulation slice mid-life. It exists so loading a
+ * world can adopt THAT world's timestep — the world file, not the machine,
+ * decides. It throws while a substage cycle is mid-flight (a tick must not
+ * change size halfway through) and restarts the accumulator at zero, because
+ * a new timestep is a new timeline.
  */
 export interface Clock {
   readonly fixedDt: number
@@ -103,6 +115,7 @@ export interface Clock {
   readonly timeScale: number
   readonly pendingStage: string | null
   setTimeScale(s: number): void
+  setFixedDt(dt: number): void
   pause(): void
   resume(stages: readonly Stage[]): void
   advance(realDtSeconds: number, stages: readonly Stage[]): number
@@ -128,6 +141,13 @@ const MAX_REAL_DT = 0.25
 const MIN_TIME_SCALE = 0
 const MAX_TIME_SCALE = 8
 
+/** Shared by the constructor and setFixedDt: a timestep must be a real, positive number of seconds. */
+function assertValidFixedDt(dt: number): void {
+  if (!Number.isFinite(dt) || dt <= 0) {
+    throw new Error(`fixedDt must be a positive number of seconds, got ${dt}`)
+  }
+}
+
 /**
  * Builds a Clock — the engine's only source of simulated time.
  *
@@ -140,12 +160,10 @@ const MAX_TIME_SCALE = 8
  * possible.
  */
 export function createClock(options: ClockOptions = {}): Clock {
-  const fixedDt = options.fixedDt ?? DEFAULT_FIXED_DT
+  let fixedDt = options.fixedDt ?? DEFAULT_FIXED_DT
   const maxTicksPerAdvance = options.maxTicksPerAdvance ?? DEFAULT_MAX_TICKS_PER_ADVANCE
 
-  if (!Number.isFinite(fixedDt) || fixedDt <= 0) {
-    throw new Error(`fixedDt must be a positive number of seconds, got ${fixedDt}`)
-  }
+  assertValidFixedDt(fixedDt)
   if (!Number.isInteger(maxTicksPerAdvance) || maxTicksPerAdvance < 1) {
     throw new Error(`maxTicksPerAdvance must be a positive integer, got ${maxTicksPerAdvance}`)
   }
@@ -159,22 +177,41 @@ export function createClock(options: ClockOptions = {}): Clock {
   // exactly right: substage-stepping is the only thing that leaves it nonzero.
   let cursor = 0
   let pendingStage: string | null = null
+  // The stage list a mid-flight tick started with; null between ticks. The
+  // cursor is an index, and an index only means something against the exact
+  // list it was counted over — if the caller rebuilds its stage list mid-tick
+  // (say, a plugin adds a system in an already-passed phase), raw indices
+  // into the NEW list would re-run a finished stage or skip the fresh one.
+  // So the first substage of a tick snapshots the list, the rest of the tick
+  // runs from the snapshot, and a system added mid-tick appears at the start
+  // of the NEXT tick, never spliced into the current one.
+  let inFlightStages: readonly Stage[] | null = null
 
-  // Runs stages[from..end] with fixedDt and closes out the tick. Called with
-  // from = 0 for a whole tick, or from = cursor to finish a mid-flight one.
-  // Stage lists must stay consistent between substage calls within one tick —
-  // the cursor is an index, not a name lookup.
-  const finishTick = (stages: readonly Stage[], from: number): void => {
-    for (let i = from; i < stages.length; i += 1) {
-      stages[i]?.run(fixedDt)
-    }
+  // The bookkeeping every tick boundary shares: count the tick, forget the
+  // cursor, the pending stage name, and the mid-flight snapshot.
+  const closeTick = (): void => {
     tick += 1
     cursor = 0
     pendingStage = null
+    inFlightStages = null
+  }
+
+  // Runs the remaining stages [from..end] with fixedDt and closes out the
+  // tick. Called with from = 0 for a whole fresh tick, or from = cursor to
+  // finish a mid-flight one — in which case the stages come from the tick's
+  // own snapshot, not from whatever list the caller holds now.
+  const finishTick = (stages: readonly Stage[], from: number): void => {
+    const list = inFlightStages ?? stages
+    for (let i = from; i < list.length; i += 1) {
+      list[i]?.run(fixedDt)
+    }
+    closeTick()
   }
 
   return {
-    fixedDt,
+    get fixedDt() {
+      return fixedDt
+    },
 
     get tick() {
       return tick
@@ -201,14 +238,35 @@ export function createClock(options: ClockOptions = {}): Clock {
       timeScale = Math.min(MAX_TIME_SCALE, Math.max(MIN_TIME_SCALE, s))
     },
 
+    setFixedDt(dt: number): void {
+      // The world file, not the machine, decides the timestep — so loading a
+      // world re-sizes the slice through here. Two guards: the new dt must
+      // pass the same test the constructor applies, and no tick may be
+      // mid-flight (half a tick at one dt and half at another would be a
+      // tick that never really happened at either size).
+      assertValidFixedDt(dt)
+      if (cursor > 0) {
+        throw new Error(
+          'cannot change fixedDt while a substage cycle is mid-flight — finish or reset the tick first',
+        )
+      }
+      fixedDt = dt
+      // A new timestep is a new timeline, so the accumulator restarts at
+      // zero. Keeping the old balance would be subtly wrong: real time
+      // banked against a big slice could cover several slices of a smaller
+      // one, firing a burst of phantom ticks the instant the world loads.
+      accumulator = 0
+    },
+
     pause(): void {
       paused = true
     },
 
     resume(stages: readonly Stage[]): void {
       // Never unpause into a half-finished tick: if substage-stepping left a
-      // cycle mid-flight, run the remaining stages right now so the world is
-      // in a between-ticks state before real time starts flowing again.
+      // cycle mid-flight, run its remaining stages right now (from the
+      // tick's own snapshot) so the world is in a between-ticks state before
+      // real time starts flowing again.
       if (cursor > 0) {
         finishTick(stages, cursor)
       }
@@ -248,9 +306,10 @@ export function createClock(options: ClockOptions = {}): Clock {
       if (!paused) {
         throw new Error('stepTick requires a paused clock — call pause() first')
       }
-      // If substage-stepping left a tick mid-flight, this completes it (running
-      // only the remaining stages); otherwise it runs one whole fresh tick.
-      // Either way exactly one tick boundary is crossed. The accumulator is
+      // If substage-stepping left a tick mid-flight, this completes it —
+      // running only the remaining stages, from the list the tick started
+      // with; otherwise it runs one whole fresh tick from `stages`. Either
+      // way exactly one tick boundary is crossed. The accumulator is
       // untouched: hand-stepped time is manual, not withdrawn from the bank.
       finishTick(stages, cursor)
     },
@@ -259,24 +318,27 @@ export function createClock(options: ClockOptions = {}): Clock {
       if (!paused) {
         throw new Error('stepSubstage requires a paused clock — call pause() first')
       }
-      const stage = stages[cursor]
+      // First substage of a tick: snapshot the list (see inFlightStages).
+      // Every later substage of THIS tick reads the snapshot instead of the
+      // argument, so the cursor's index always means what it meant.
+      if (cursor === 0) {
+        inFlightStages = stages
+      }
+      const list = inFlightStages ?? stages
+      const stage = list[cursor]
       if (stage === undefined) {
-        // Empty stage list (or one that shrank mid-tick): nothing left to run,
-        // so close out the tick — time passes even when nobody is listening.
-        tick += 1
-        cursor = 0
-        pendingStage = null
+        // Empty stage list: nothing to run, so close out the tick — time
+        // passes even when nobody is listening.
+        closeTick()
         return null
       }
       stage.run(fixedDt)
       cursor += 1
-      if (cursor >= stages.length) {
+      if (cursor >= list.length) {
         // That was the last stage: the tick is complete, the cursor resets.
-        tick += 1
-        cursor = 0
-        pendingStage = null
+        closeTick()
       } else {
-        pendingStage = stages[cursor]?.name ?? null
+        pendingStage = list[cursor]?.name ?? null
       }
       return stage.name
     },
@@ -285,10 +347,12 @@ export function createClock(options: ClockOptions = {}): Clock {
       // Back to the moment before the first tick. The paused flag survives on
       // purpose — resetting a paused lesson should not fling time forward —
       // and so does timeScale, which is a user preference, not world state.
+      // A mid-flight snapshot is abandoned along with its half-run tick.
       tick = 0
       accumulator = 0
       cursor = 0
       pendingStage = null
+      inFlightStages = null
     },
   }
 }

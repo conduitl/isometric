@@ -1,0 +1,28 @@
+{
+  "name": "@engine/tilemap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tilemap plugin: flat row-major layers (index = y·w + x is a taught formula), tile↔world conversions, per-projection render adapters, and the cached fast path (offscreen layer caches, dirty-rect invalidation, scaled blits when zoomed out) that keeps 256×256 worlds smooth on school Chromebooks.",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engine/core": "workspace:*",
+    "@engine/math": "workspace:*",
+    "@engine/projection": "workspace:*",
+    "@engine/renderer": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

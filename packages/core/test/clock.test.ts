@@ -265,6 +265,107 @@ describe('stepping', () => {
   })
 })
 
+describe('mid-tick stage-list rebuilds (the snapshot rule)', () => {
+  it('a system added mid-tick appears at the start of the NEXT tick, never spliced into this one', () => {
+    const clock = createClock()
+    clock.pause()
+    const log: string[] = []
+    const original = recordingStages(['integrate', 'collide'], log)
+
+    clock.stepSubstage(original) // runs 'integrate'; cursor now points at index 1
+
+    // Mid-tick, a system lands in an already-passed phase and the caller
+    // rebuilds its stage list: 'input' now occupies index 0, so a raw index
+    // into the NEW list would re-run 'integrate' and never run the addition.
+    const rebuilt = recordingStages(['input', 'integrate', 'collide'], log)
+    clock.stepTick(rebuilt) // finish the tick
+
+    // The tick finished on its ORIGINAL list: each stage ran exactly once.
+    expect(log).toEqual(['integrate', 'collide'])
+    expect(clock.tick).toBe(1)
+    expect(clock.pendingStage).toBeNull()
+
+    // The next tick begins with the new list, addition included.
+    clock.stepTick(rebuilt)
+    expect(log).toEqual(['integrate', 'collide', 'input', 'integrate', 'collide'])
+    expect(clock.tick).toBe(2)
+  })
+
+  it('substage steps and pendingStage follow the snapshot, not the rebuilt list', () => {
+    const clock = createClock()
+    clock.pause()
+    const log: string[] = []
+    const original = recordingStages(['integrate', 'collide'], log)
+
+    clock.stepSubstage(original)
+    expect(clock.pendingStage).toBe('collide')
+
+    const rebuilt = recordingStages(['input', 'integrate', 'collide'], log)
+    expect(clock.stepSubstage(rebuilt)).toBe('collide') // the snapshot wins
+    expect(clock.tick).toBe(1)
+    expect(log).toEqual(['integrate', 'collide'])
+
+    // Fresh tick, no snapshot: the new list is adopted from stage 0.
+    expect(clock.stepSubstage(rebuilt)).toBe('input')
+    expect(clock.pendingStage).toBe('integrate')
+  })
+
+  it('resume() finishes a mid-flight tick from the snapshot too', () => {
+    const clock = createClock()
+    clock.pause()
+    const log: string[] = []
+    const original = recordingStages(['integrate', 'collide'], log)
+
+    clock.stepSubstage(original)
+    clock.resume(recordingStages(['input', 'integrate', 'collide'], log))
+
+    expect(log).toEqual(['integrate', 'collide']) // original stages, once each
+    expect(clock.tick).toBe(1)
+    expect(clock.paused).toBe(false)
+  })
+})
+
+describe('setFixedDt — the timestep follows the world', () => {
+  it('changes the tick cadence', () => {
+    const clock = createClock() // 1/60
+    clock.setFixedDt(0.1)
+    expect(clock.fixedDt).toBe(0.1)
+    const dts: number[] = []
+    const stages = recordingStages(['sim'], [], dts)
+    expect(clock.advance(0.25, stages)).toBe(2) // 10 ticks/s now, not 60
+    expect(dts).toEqual([0.1, 0.1])
+  })
+
+  it('rejects nonsensical timesteps, exactly like the constructor', () => {
+    const clock = createClock()
+    expect(() => clock.setFixedDt(0)).toThrow(/positive/)
+    expect(() => clock.setFixedDt(-1)).toThrow(/positive/)
+    expect(() => clock.setFixedDt(Number.NaN)).toThrow(/positive/)
+    expect(() => clock.setFixedDt(Number.POSITIVE_INFINITY)).toThrow(/positive/)
+    expect(clock.fixedDt).toBe(FIXED) // nothing changed
+  })
+
+  it('throws while a substage cycle is mid-flight', () => {
+    const clock = createClock()
+    clock.pause()
+    clock.stepSubstage(recordingStages(['a', 'b'], []))
+    expect(() => clock.setFixedDt(0.1)).toThrow(/mid-flight/)
+    expect(clock.fixedDt).toBe(FIXED)
+  })
+
+  it('zeroes the accumulator: a new timeline starts with no banked time', () => {
+    const clock = createClock() // 1/60
+    clock.advance(0.5 * FIXED, []) // bank half a tick of real time
+    expect(clock.alpha).toBeGreaterThan(0)
+
+    clock.setFixedDt(1 / 240) // the old balance would cover 2 of these slices
+
+    expect(clock.alpha).toBe(0)
+    expect(clock.advance(0, [])).toBe(0) // no phantom ticks fire
+    expect(clock.tick).toBe(0)
+  })
+})
+
 describe('reset', () => {
   it('zeroes tick and accumulator but keeps the paused flag', () => {
     const clock = createClock()

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Three windows — same world, different matrix</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --line: light-dark(#d8e0ec, #263349);
+        --ink: light-dark(#182435, #e4eaf4);
+        --muted: light-dark(#5a6a80, #93a2b8);
+        --bg: light-dark(#f7f9fc, #0d131e);
+        --accent: #2f62d6;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        display: flex;
+        flex-direction: column;
+        height: 100dvh;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+        flex-wrap: wrap;
+      }
+      button, label.file {
+        font: inherit;
+        padding: 4px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      button:hover, label.file:hover { border-color: var(--accent); }
+      input[type="file"] { display: none; }
+      #info { margin-left: auto; opacity: 0.75; }
+      .windows {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 1px;
+        background: var(--line);
+      }
+      .window {
+        position: relative;
+        background: var(--bg);
+        min-width: 0;
+        min-height: 0;
+      }
+      .window canvas { display: block; width: 100%; height: 100%; }
+      .window .tag {
+        position: absolute;
+        top: 8px;
+        left: 10px;
+        font-size: 12px;
+        opacity: 0.85;
+        pointer-events: none;
+      }
+      .window .tag .xray { color: var(--muted); }
+      @media (max-width: 900px) {
+        .windows { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <button id="btn-save" title="Download the world as .world.json">Save world</button>
+      <label class="file" title="Load a .world.json file">Load world<input id="file-load" type="file" accept=".json,application/json" /></label>
+      <span id="info">click any window to pick — the same world answers in all three</span>
+    </div>
+    <div class="windows">
+      <div class="window">
+        <canvas id="view-topdown"></canvas>
+        <span class="tag">top-down · primary</span>
+      </div>
+      <div class="window">
+        <canvas id="view-iso"></canvas>
+        <span class="tag">isometric 2:1 · <span class="xray">X-ray view</span></span>
+      </div>
+      <div class="window">
+        <canvas id="view-profile"></canvas>
+        <span class="tag">profile · <span class="xray">X-ray view</span></span>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "name": "three-windows",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Phase 1 exit deliverable: one world file viewed through profile, top-down, and isometric projections simultaneously — click-picking in all three via inverse transforms, deterministic iso depth sorting, save/load round-trip. Same world, different matrix.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engine/core": "workspace:*",
+    "@engine/math": "workspace:*",
+    "@engine/projection": "workspace:*",
+    "@engine/renderer": "workspace:*",
+    "@engine/renderer-canvas2d": "workspace:*",
+    "@engine/tilemap": "workspace:*",
+    "@engine/world-format": "workspace:*"
+  },
+  "devDependencies": {
+    "@engine/testkit": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

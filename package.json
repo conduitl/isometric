@@ -12,6 +12,7 @@
     "test:visual": "vitest run --project browser",
     "test:all": "vitest run",
     "test:watch": "vitest --project unit",
+    "perf": "node scripts/perf/tilemap-budget.mjs",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
     "dev:demo": "pnpm --filter bedrock-demo dev",

@@ -133,6 +133,67 @@ describe('createNullBackend', () => {
     expect(() => backend.endFrame()).toThrow(/without a matching beginFrame/)
   })
 
+  it('records image commands by label — never the live source object — and keeps the log hashable', () => {
+    const backend = createNullBackend()
+    // In node there is no real canvas to blit; any stand-in object proves the
+    // point, because the record must not contain it either way.
+    const source = { notPlainData: true } as unknown as CanvasImageSource
+
+    backend.beginFrame(view)
+    backend.drawImage({ source, label: 'tilemap:ground', dx: 1, dy: 2, dw: 3, dh: 4 })
+    backend.drawImage({
+      source,
+      label: 'tilemap:cliffs',
+      sx: 5,
+      sy: 6,
+      sw: 7,
+      sh: 8,
+      dx: 9,
+      dy: 10,
+      dw: 11,
+      dh: 12,
+    })
+    backend.endFrame()
+
+    expect(backend.frames).toEqual([
+      [
+        { kind: 'begin', ...view },
+        { kind: 'image', label: 'tilemap:ground', dx: 1, dy: 2, dw: 3, dh: 4 },
+        {
+          kind: 'image',
+          label: 'tilemap:cliffs',
+          dx: 9,
+          dy: 10,
+          dw: 11,
+          dh: 12,
+          sx: 5,
+          sy: 6,
+          sw: 7,
+          sh: 8,
+        },
+        { kind: 'end' },
+      ],
+    ])
+
+    const whole = backend.frames[0]?.[1]
+    const cropped = backend.frames[0]?.[2]
+    expect(whole).toBeDefined()
+    expect(cropped).toBeDefined()
+    expect('source' in (whole as object)).toBe(false)
+    expect('source' in (cropped as object)).toBe(false)
+    expect('sx' in (whole as object)).toBe(false)
+    // Plain JSON all the way down — the determinism contract for this seam.
+    expect(() => JSON.stringify(backend.frames)).not.toThrow()
+  })
+
+  it('enforces the frame sandwich for drawImage too', () => {
+    const backend = createNullBackend()
+    const source = {} as unknown as CanvasImageSource
+    expect(() =>
+      backend.drawImage({ source, label: 'stray', dx: 0, dy: 0, dw: 1, dh: 1 }),
+    ).toThrow(/outside a frame/)
+  })
+
   it('records identical command sequences identically (the property replay hashing relies on)', () => {
     const draw = (b: ReturnType<typeof createNullBackend>): void => {
       b.beginFrame({ width: 320, height: 240, dpr: 2, background: '#000' })

@@ -1,0 +1,26 @@
+{
+  "formatVersion": 99,
+  "meta": {
+    "worldId": "w-future",
+    "name": "From The Future"
+  },
+  "settings": {
+    "tileSize": 1,
+    "primaryProjection": "topdown",
+    "fixedDt": 0.016666666666666666,
+    "seed": 2099
+  },
+  "nextEntityId": 2,
+  "tilesets": [],
+  "layers": [],
+  "entities": [
+    {
+      "id": "e1",
+      "name": "time-traveler",
+      "components": {
+        "position": { "x": 0, "y": 0 },
+        "hologram": { "shimmer": true }
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "worldId": "w-salvage",
+    "name": "Mostly Fine"
+  },
+  "settings": {
+    "tileSize": 1,
+    "primaryProjection": "iso",
+    "fixedDt": 0.016666666666666666,
+    "seed": 11
+  },
+  "nextEntityId": 4,
+  "tilesets": [
+    {
+      "id": "basic",
+      "name": "Basic",
+      "tiles": [
+        { "name": "block", "colors": { "top": "#ff8a65", "left": "#e64a19", "right": "#bf360c" } }
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "id": "l1",
+      "name": "ground",
+      "width": 3,
+      "height": 3,
+      "elevation": 0,
+      "layerBand": 0,
+      "tilesetId": "basic",
+      "cells": [1, 1, 1, 1, 0, 1, 1, 1, 1]
+    }
+  ],
+  "entities": [
+    { "id": "e1", "name": "keeper", "components": { "position": { "x": 0, "y": 0 } } },
+    { "id": "e2", "name": "rotten", "components": "oops - a hand edit went wrong here" },
+    { "id": "e3", "name": "also-fine", "components": { "position": { "x": 2, "y": 2 }, "elevation": { "z": 0 } } }
+  ]
+}

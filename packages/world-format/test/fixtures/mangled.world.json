@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "worldId": "w-mangled",
+    "name": "Edited By Hand"
+  },
+  "settings": {
+    "tileSize": "big",
+    "primaryProjection": "topdown",
+    "fixedDt": 0.016666666666666666,
+    "seed": 3
+  },
+  "nextEntityId": 9,
+  "tilesets": [
+    {
+      "id": "basic",
+      "name": "Basic",
+      "tiles": [
+        { "name": "floor", "colors": { "top": "#9e9e9e" } }
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "id": "l1",
+      "name": "ground",
+      "width": "eight",
+      "height": 2,
+      "elevation": 0,
+      "layerBand": 0,
+      "tilesetId": "basic",
+      "cells": [1, 1, 1, 1]
+    },
+    {
+      "id": "l2",
+      "name": "sky",
+      "width": 2,
+      "height": 2,
+      "elevation": 1,
+      "layerBand": 1,
+      "tilesetId": "basic",
+      "cells": [0, 1, 0, 1]
+    }
+  ],
+  "entities": [
+    {
+      "id": "e8",
+      "name": "survivor",
+      "components": {
+        "marker": {},
+        "position": { "x": 1, "y": 1 }
+      }
+    }
+  ]
+}

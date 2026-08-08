@@ -1,0 +1,37 @@
+{
+  "formatVersion": 0,
+  "meta": {
+    "worldId": "w-oldtimer",
+    "name": "Before The Rename"
+  },
+  "settings": {
+    "tileSize": 1,
+    "primaryProjection": "topdown",
+    "fixedDt": 0.016666666666666666,
+    "seed": 7
+  },
+  "tilesets": [
+    {
+      "id": "basic",
+      "name": "Basic",
+      "tiles": [
+        { "name": "floor", "colors": { "top": "#8bc34a" } }
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "id": "l1",
+      "name": "ground",
+      "width": 3,
+      "height": 2,
+      "elevation": 0,
+      "tilesetId": "basic",
+      "cells": [1, 1, 0, 0, 1, 1]
+    }
+  ],
+  "entities": [
+    { "id": 1, "name": "hero", "components": { "position": { "x": 0, "y": 0 } } },
+    { "id": 5, "name": "goal", "components": { "position": { "x": 2, "y": 1 } } }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "worldId": "w-island-01",
+    "name": "Tiny Island"
+  },
+  "settings": {
+    "tileSize": 1,
+    "primaryProjection": "iso",
+    "fixedDt": 0.016666666666666666,
+    "seed": 12345
+  },
+  "nextEntityId": 5,
+  "tilesets": [
+    {
+      "id": "island",
+      "name": "Island Tiles",
+      "tiles": [
+        {
+          "name": "grass",
+          "colors": {
+            "top": "#4caf50",
+            "left": "#388e3c",
+            "right": "#2e7d32"
+          }
+        },
+        {
+          "name": "sand",
+          "colors": {
+            "top": "#ffe082",
+            "left": "#ffca28",
+            "right": "#ffb300"
+          }
+        },
+        {
+          "name": "water",
+          "colors": {
+            "top": "#4fc3f7"
+          }
+        },
+        {
+          "name": "rock",
+          "colors": {
+            "top": "#90a4ae",
+            "left": "#78909c",
+            "right": "#607d8b",
+            "side": "#546e7a"
+          }
+        }
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "id": "ground",
+      "name": "ground",
+      "width": 6,
+      "height": 5,
+      "elevation": 0,
+      "layerBand": 0,
+      "tilesetId": "island",
+      "cells": [3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 3, 3, 2, 1, 1, 2, 3, 3, 2, 1, 1, 2, 3, 3, 3, 3, 3, 3, 3]
+    },
+    {
+      "id": "cliffs",
+      "name": "cliffs",
+      "width": 6,
+      "height": 5,
+      "elevation": 1,
+      "layerBand": 0,
+      "tilesetId": "island",
+      "cells": [0, 0, 0, 

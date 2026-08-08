@@ -29,7 +29,16 @@ loop pauses and single-steps; "how does clicking work?" is literally answered by
 
 ## Status
 
-**Phase 0 in progress.** Architecture and roadmap defined August 2026 (four researchers, three
+**Phase 1 complete (pending commit); Phase 0 shipped.** One world file renders through profile,
+top-down, and isometric projections simultaneously with cross-view picking (`pnpm --filter
+three-windows dev`); the world format has atomic two-slot saves, migrations, salvage mode, and a
+corrupted-file fixture corpus; the tilemap cache holds 60 fps at 256×256 fully zoomed out on the
+4×-throttled reference profile (`pnpm perf` — measured ~10× faster than per-tile drawing). An
+adversarial review pass (4 reviewers, per-finding verification) confirmed 20 findings — including
+an iso/top-down mirror-image chirality bug caught while zero world files existed (decision D7) —
+and all are fixed with regression tests.
+
+Earlier: **Phase 0** (bedrock) below. Architecture and roadmap defined August 2026 (four researchers, three
 independent proposals, a three-judge panel, and an adversarial red-team review — amendments folded
 into these documents). The Phase 0 foundation is scaffolded and green:
 

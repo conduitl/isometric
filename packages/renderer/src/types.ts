@@ -110,7 +110,41 @@ export interface TextCmd {
 }
 
 /**
- * The contract every backend implements — the whole renderer API in six
+ * Copy a rectangle of an existing picture onto the frame — the blit.
+ *
+ * `source` is anything the browser already holds as pixels (a canvas, an
+ * OffscreenCanvas, a bitmap). The dest rect dx/dy/dw/dh says where those
+ * pixels land and how big, in CSS pixels — and dw/dh are mandatory because
+ * SCALED blits are the whole point: a tile layer rendered once into an
+ * offscreen cache can be drawn at any zoom by stretching one image, instead
+ * of re-drawing thousands of tiles per frame (docs/ARCHITECTURE.md §5).
+ *
+ * sx/sy/sw/sh optionally crop the source first, in the source's own pixel
+ * coordinates: "take just this window of the cache". They only mean anything
+ * as a complete rectangle — give all four or none; omitting them blits the
+ * whole source.
+ *
+ * The honest wrinkle: `source` is a live browser object, the one command
+ * field that is NOT plain data — it can't be JSON'd, so it can't be hashed.
+ * `label` exists to stand in for it: a stable, caller-chosen id (e.g.
+ * 'tilemap:ground') that logs and replay hashes record in its place. The
+ * pixels stay swappable; the command log stays data.
+ */
+export interface ImageCmd {
+  readonly source: CanvasImageSource
+  readonly label: string
+  readonly sx?: number
+  readonly sy?: number
+  readonly sw?: number
+  readonly sh?: number
+  readonly dx: number
+  readonly dy: number
+  readonly dw: number
+  readonly dh: number
+}
+
+/**
+ * The contract every backend implements — the whole renderer API in seven
  * methods. A frame is a sandwich: one `beginFrame` (size the surface, clear
  * it), any number of draw calls in between, one `endFrame` (a chance for
  * batching backends to actually submit their work; immediate-mode backends
@@ -129,5 +163,6 @@ export interface RendererBackend {
   drawCircle(cmd: CircleCmd): void
   drawPolyline(cmd: PolylineCmd): void
   drawText(cmd: TextCmd): void
+  drawImage(cmd: ImageCmd): void
   endFrame(): void
 }

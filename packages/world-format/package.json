@@ -1,0 +1,27 @@
+{
+  "name": "@engine/world-format",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The declared one-way door: canonical versioned JSON world format. Serialize/parse with student-legible errors, ordered pure migrations, atomic two-slot saves, and salvage mode — because kids' files get truncated, hand-edited, and synced mid-write. Zod is quarantined HERE and never leaks into public types.",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engine/core": "workspace:*",
+    "@engine/math": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

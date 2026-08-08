@@ -7,6 +7,7 @@ packages:
 # ecosystem seams we depend on (typescript-eslint, tsdown dts) are proven on 5.x.
 # Upgrading to TS 7 is a recorded chore, not an accident — see docs/DECISIONS.md.
 catalog:
+  zod: ^4.4.3
   '@changesets/cli': ^2.31.1
   '@types/node': ^26.2.0
   eslint: ^10.8.1

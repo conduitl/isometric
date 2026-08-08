@@ -30,6 +30,9 @@ catalogs:
     vitest:
       specifier: ^4.1.10
       version: 4.1.10
+    zod:
+      specifier: ^4.4.3
+      version: 4.4.3
 
 importers:
 
@@ -97,6 +100,40 @@ importers:
         specifier: ^7.2.0
         version: 7.2.0(@astrojs/markdown-remark@7.2.2)(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.3)(@types/node@26.2.0)
 
+  apps/three-windows:
+    dependencies:
+      '@engine/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@engine/math':
+        specifier: workspace:*
+        version: link:../../packages/math
+      '@engine/projection':
+        specifier: workspace:*
+        version: link:../../packages/projection
+      '@engine/renderer':
+        specifier: workspace:*
+        version: link:../../packages/renderer
+      '@engine/renderer-canvas2d':
+        specifier: workspace:*
+        version: link:../../packages/renderer-canvas2d
+      '@engine/tilemap':
+        specifier: workspace:*
+        version: link:../../packages/tilemap
+      '@engine/world-format':
+        specifier: workspace:*
+        version: link:../../packages/world-format
+    devDependencies:
+      '@engine/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.1)
+
   packages/core:
     dependencies:
       '@engine/math':
@@ -111,6 +148,19 @@ importers:
         version: 5.9.3
 
   packages/math:
+    devDependencies:
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/projection:
+    dependencies:
+      '@engine/math':
+        specifier: workspace:*
+        version: link:../math
     devDependencies:
       tsdown:
         specifier: 'catalog:'
@@ -149,6 +199,47 @@ importers:
         version: 5.9.3
 
   packages/testkit:
+    devDependencies:
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/tilemap:
+    dependencies:
+      '@engine/core':
+        specifier: workspace:*
+        version: link:../core
+      '@engine/math':
+        specifier: workspace:*
+        version: link:../math
+      '@engine/projection':
+        specifier: workspace:*
+        version: link:../projection
+      '@engine/renderer':
+        specifier: workspace:*
+        version: link:../renderer
+    devDependencies:
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/world-format:
+    dependencies:
+      '@engine/core':
+        specifier: workspace:*
+        version: link:../core
+      '@engine/math':
+        specifier: workspace:*
+        version: link:../math
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       tsdown:
         specifier: 'catalog:'

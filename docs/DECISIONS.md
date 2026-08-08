@@ -15,6 +15,8 @@ register at every phase boundary; add every new dependency here with its escape 
 | D4 | **Semantic event vocabulary + payload schemas** | Tiered freezes (builder.* at P3, tinkerer.* at P4, engineer.* at P5); additive-only after each freeze; gesture-level granularity; permanent alias table. Shipped lessons hardcode predicates against it. | Lesson-replay corpus in CI from first authored lesson; alias table lets corrected names supersede mistakes without breaking replays. |
 | D5 | **Anchor registry** | Lessons reference UI chrome only via versioned `data-anchor` ids; additive-only; renaming without an alias fails CI. | Same governance as D4. |
 | D6 | **Determinism scope** | Same build + same pinned browser. Never promise cross-machine float identity. | Trig routed through `@engine/math` preserves a deterministic-approximation upgrade path if cross-device replay is ever truly needed. |
+| D7 | **Iso chirality: south-east camera** | `screen = ((x+y)·tileW/2, (x−y)·tileH/2 − z·zScale)`, depth `x − y + z`. Chosen (Aug 2026, pre-release) so iso's determinant carries the same sign as top-down's — the world keeps one winding in every view and a kid's map is never mirror-reversed between the two primary windows. The classic games formula `(x−y, x+y)` assumes y-south coordinates and silently mirrors a y-north world. | Permanent once world files and tutorial predicates exist; caught and fixed by adversarial review while zero files existed. |
+| D8 | **File-format value semantics (D1 riders)** | (a) `−0` normalizes to `0` on save — matches replay hashing; the format does not promise the distinction. (b) Unknown keys **outside** `components` drop on load→save with a named student-language warning; unknown keys **inside** `components` round-trip verbatim (the designed extension point). (c) Schema caps: layer ≤ 256×256, `tileSize` ∈ (0, 64], `|layerBand|` ≤ 2²⁰ — the preconditions the depth-band arithmetic relies on, enforced where files enter. | Riders pinned by round-trip tests; changing any of them is a formatVersion bump with a migration. |
 
 ## Reversible doors (dependencies and choices with priced escape hatches)
 
@@ -36,6 +38,8 @@ register at every phase boundary; add every new dependency here with its escape 
 | Item | Deferred until | Notes |
 |---|---|---|
 | Persisted undo history / "replay how I built this" | A design survives format migration | Session-scoped history in v1; patch stacks must never be replayed against migrated documents |
+| Iso wall-face picking | Editor phase (with elevation tools) | v1: clicking an iso wall pixel falls through to the ground cell beneath — documented in the demo's picking module, not hidden; fixing it needs per-face inversion the tutorial-facing editor will motivate |
+| Per-cell iso paint-queue granularity | Editor phase | v1 keeps whole-layer blits + `bandAbove` entity banding; the two known mis-sort configurations (ground entity behind raised terrain shows through; the alternative sinks entities at wall bases) are documented in `views.ts` — true cross-storey interleaving needs per-diagonal-strip queue items |
 | Multi-tile iso footprints | Phase 5 | v1 = 1-tile footprints; committed mechanism: `sortAnchor` + footprint splitting; anomaly ships as a lesson |
 | General multi-projection *editing* | Post-v1, priced separately | v1 = primary projection per world + "X-ray view" lens with schematic fallbacks; full editing needs per-projection art budget |
 | Tiled TMJ / LDtk importers | A real teacher asks | Import-only boundary; GID flip-bits never enter our schema |

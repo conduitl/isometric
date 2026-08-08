@@ -1,0 +1,25 @@
+{
+  "name": "@engine/projection",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The curriculum centerpiece: Projections as data (ground matrix A, elevation vector e, depthKey, parameterized inverse), Camera-as-matrix, the named TransformStack, and picking = the inverse walk. Depends only on @engine/math so it can be taught standalone.",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engine/math": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}
