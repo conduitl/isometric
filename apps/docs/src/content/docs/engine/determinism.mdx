@@ -1,0 +1,68 @@
+---
+title: Determinism, scoped honestly
+description: Same seed, same inputs, same world — why that claim holds, what it powers, and where it deliberately stops.
+---
+
+The engine promises: **same seed + same inputs → the same world, every run.** That promise powers
+most of the pedagogy — "predict, then step, then compare" only works if stepping is repeatable —
+plus tutorial validation, replay, and screenshot testing. It is kept by three mechanisms and one
+honest boundary.
+
+## The Clock
+
+Time is never read; it is *fed in*. The Clock is a fixed-timestep accumulator (60 Hz, with a 30 Hz
+low-end profile): the wall clock only decides *how many* fixed steps to run, never what happens
+inside one. Between steps, rendering interpolates by an exposed alpha — which is not a hidden
+implementation trick but the engine's first lerp lesson.
+
+Because simulation advances in identical discrete steps, the Clock can also run them one at a time:
+pause, step-one-tick, step-one-substage, time-scale. "Freeze the world and watch the vectors
+change" is the core pedagogical interaction, and it is only possible because no code path secretly
+asks what time it is.
+
+## Seeded randomness
+
+`Math.random` gives you numbers you can never have again. `createRng(seed)` in `@engine/math`
+(a mulberry32 generator, derivation in its doc comment) gives you the *same* sequence for the same
+seed — so replays replay, tests mean something, and "random" in a lesson is reproducibly random.
+The seed is ordinary world data, saved in the file.
+
+## The lint wall
+
+Convention decays; lint does not. ESLint bans, in all engine and app source:
+
+- `Date.now` — time is fed into the Clock, never read ambiently.
+- `Math.random` — randomness comes from `createRng(seed)`.
+- `Math.sin`, `Math.cos`, `Math.atan2`, and friends — raw trig routes through the `Scalar`
+  wrappers in `@engine/math`, the only package allowed to touch it.
+
+The trig ban looks paranoid until you need the escape hatch it preserves: browsers may legally
+differ in the last bits of transcendental functions, so if cross-device replay is ever truly
+needed, deterministic approximations can be swapped in at one seam — because every caller already
+goes through it.
+
+## The honest boundary
+
+Determinism claims are scoped to **same build + same pinned browser** — never cross-machine float
+identity (`docs/DECISIONS.md` D6). Promising bit-identical floats across arbitrary devices is a
+promise the web platform does not let anyone keep, so we do not make it.
+
+What actually runs, and where:
+
+- **The replay-hash test** runs on every commit as part of `pnpm test`, in Node, on the headless
+  null backend: the same seed advanced for the same ticks twice in one process, then the full
+  simulation state and the recorded draw-command stream are hashed and compared. It proves the
+  engine adds no nondeterminism of its own; no browser is involved, so it claims nothing about
+  browsers.
+- **The pinned-browser scoping lives in the browser suites.** The e2e suite runs on Playwright's
+  pinned Chromium in CI; the visual-regression suite renders deterministic scenes in that same
+  pinned Chromium, with baselines blessed on the local reference profile rather than shared CI
+  runners (`docs/DECISIONS.md` R10/R11). Browser upgrades are deliberate re-bless PRs, never
+  ambient drift.
+- **Perf gates** run on the pinned local reference machine, not in CI — shared-runner timing is
+  noise, not signal.
+
+One more determinism tripwire worth writing down now: replay hashes must be identical with
+inspectors open versus closed — observation changing behavior is a named bug class here. That
+invariant will become a real gate when the inspector ships (a Phase 4/5 deliverable); it is
+recorded here so the gate is designed in from the start, not retrofitted.

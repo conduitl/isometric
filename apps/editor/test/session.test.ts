@@ -372,6 +372,135 @@ describe('loadWorld', () => {
   })
 })
 
+describe("fixture worlds (origin 'fixture')", () => {
+  const REFUSAL =
+    'This is a lesson world you are visiting — your own world is parked and safe. ' +
+    'Head back to it before saving.'
+
+  it('raises fixtureActive and tells the parked-world story — through edits too', () => {
+    const session = makeSession()
+    expect(session.fixtureActive).toBe(false)
+
+    session.loadWorld(otherWorld('lesson stage'), 'fixture')
+    expect(session.fixtureActive).toBe(true)
+    expect(session.store.getState().persistence).toEqual({
+      state: 'unsaved',
+      message: 'lesson world — your own world is parked and safe',
+    })
+
+    // Editing the fixture keeps the message up: the status bar's story
+    // while a fixture is live is "your world is parked", never silence.
+    session.bus.dispatch({ kind: 'place-entity', marker: 'crate', position: { x: 2.5, y: 2.5 }, elevation: 0 })
+    expect(session.store.getState().persistence).toEqual({
+      state: 'unsaved',
+      message: 'lesson world — your own world is parked and safe',
+    })
+  })
+
+  it('save refuses with zero storage calls and zero document side effects', () => {
+    // A hostile SlotStorage that records every call: the refusal is only
+    // proven if this ledger stays EMPTY (write would also throw — but it
+    // must never even be reached).
+    const calls: string[] = []
+    const hostile: SlotStorage = {
+      read: () => null, // boot finds empty storage (reads are not the hazard)
+      write(key) {
+        calls.push(`write:${key}`)
+        throw new Error('save() must never touch storage while a fixture is live')
+      },
+      remove(key) {
+        calls.push(`remove:${key}`)
+      },
+    }
+    const session = makeSession(hostile)
+    const brush = createBrushTool(session)
+    session.addTool(brush) // 'brush' is the boot-default active tool
+    session.loadWorld(otherWorld('lesson stage'), 'fixture')
+    session.setActiveTile(4) // stone: really changes the grass it touches
+
+    // Open a LIVE stroke: a refusing save must not settle (commit) it.
+    brush.onPointerDown(ev({ tile: { tx: 1, ty: 1 }, world: { x: 1.5, y: 1.5, z: 0 } }))
+    const bytesBefore = serializeWorld(session.doc)
+    const events: BuilderEvent[] = []
+    session.onEvent((event) => events.push(event))
+
+    const outcome = session.save()
+    expect(outcome).toEqual({ ok: false, message: REFUSAL })
+    expect(calls).toEqual([]) // the ledger: not one storage call
+    expect(serializeWorld(session.doc)).toBe(bytesBefore) // document untouched
+    expect(events).toEqual([]) // no world-saved, no settle-committed stroke
+    expect(session.store.getState().canUndo).toBe(false) // nothing entered history
+    expect(session.store.getState().persistence).toEqual({ state: 'unsaved', message: REFUSAL })
+
+    // The stroke is STILL the live gesture it was: Esc reverts its cell —
+    // the proof the refusal left the gesture exactly alone.
+    session.cancelGesture()
+    const ground = session.doc.layers.find((layer) => layer.id === 'ground')
+    if (ground === undefined) throw new Error('fixture world lost its ground layer')
+    expect(getCell(ground, 1, 1)).toBe(1) // grass again
+  })
+
+  it('any other origin lowers the flag, and save works again', () => {
+    const storage = memoryStorage()
+    const session = makeSession(storage)
+    session.loadWorld(otherWorld('lesson stage'), 'fixture')
+    expect(session.save().ok).toBe(false)
+
+    session.loadWorld(otherWorld('my own world'), 'load')
+    expect(session.fixtureActive).toBe(false)
+    expect(session.store.getState().persistence).toEqual({ state: 'saved', message: null })
+    expect(session.save()).toEqual({ ok: true })
+    expect(storage.map.get('world')).toBe(serializeWorld(session.doc))
+  })
+})
+
+describe("loadWorld origin 'park-restore' (the parked world coming home)", () => {
+  it("arrives honestly UNSAVED with the keep-it message — its bytes may sit in no save slot", () => {
+    const storage = memoryStorage()
+    const session = makeSession(storage)
+    // The detour: a fixture holds the stage, an iso lens is up, and the
+    // fixture has history — everything a restore must sweep.
+    session.loadWorld(otherWorld('lesson stage'), 'fixture')
+    session.setViewProjection('iso')
+    session.bus.dispatch({ kind: 'place-entity', marker: 'crate', position: { x: 2.5, y: 2.5 }, elevation: 0 })
+    expect(session.store.getState().canUndo).toBe(true)
+
+    const events: BuilderEvent[] = []
+    session.onEvent((event) => events.push(event))
+    session.loadWorld(otherWorld('my own world'), 'park-restore')
+
+    // The full 'load' semantics, preserved: flag down, history cleared,
+    // lens reset — a park-restore is a load in every mechanical respect.
+    expect(session.fixtureActive).toBe(false)
+    expect(session.store.getState().canUndo).toBe(false)
+    expect(session.viewProjection).toBeNull()
+    // …except the badge: NOT 'saved' — the restored bytes exist in no save
+    // slot until the student saves, and the message names the one action
+    // that closes that window.
+    expect(session.store.getState().persistence).toEqual({
+      state: 'unsaved',
+      message: 'back from the lesson — press Ctrl+S to keep your world',
+    })
+    // The frozen event vocabulary (D4) knows no 'park-restore': to lesson
+    // data this arrival IS a load, and the event says so.
+    expect(
+      events.filter((event) => event.type === 'builder.world-loaded').map((event) => event.origin),
+    ).toEqual(['load'])
+  })
+
+  it('a save after the restore flips to saved — the window closes', () => {
+    const storage = memoryStorage()
+    const session = makeSession(storage)
+    session.loadWorld(otherWorld('lesson stage'), 'fixture')
+    session.loadWorld(otherWorld('my own world'), 'park-restore')
+    expect(session.store.getState().persistence.state).toBe('unsaved')
+
+    expect(session.save()).toEqual({ ok: true })
+    expect(session.store.getState().persistence).toEqual({ state: 'saved', message: null })
+    expect(storage.map.get('world')).toBe(serializeWorld(session.doc))
+  })
+})
+
 describe('the keyboard cell cursor', () => {
   it('summons at the layer center on first use, then clamps to the bounds', () => {
     const session = makeSession()
@@ -511,6 +640,43 @@ describe('lastActionSeq', () => {
   })
 })
 
+describe('announce — the tutorial host\'s door into the one voice', () => {
+  it('sets lastAction, bumps the seq, and emits NO builder event', () => {
+    const session = makeSession()
+    const events: BuilderEvent[] = []
+    session.onEvent((event) => events.push(event))
+    const seqBefore = session.store.getState().lastActionSeq
+
+    session.announce('step 2 of 5: Find the address (12, 4)')
+    const snap = session.store.getState()
+    expect(snap.lastAction).toBe('step 2 of 5: Find the address (12, 4)')
+    expect(snap.lastActionSeq).toBe(seqBefore + 1)
+    // NO event: a rail change is narration, not work — lessons must never
+    // be able to gate on their own announcements.
+    expect(events).toEqual([])
+  })
+
+  it('shares lastActionSeq monotonically with builder-event announcements', () => {
+    const session = makeSession()
+    expect(session.store.getState().lastActionSeq).toBe(1) // boot's 'loaded world'
+
+    session.bus.dispatch({ kind: 'place-entity', marker: 'crate', position: { x: 1.5, y: 1.5 }, elevation: 0 })
+    expect(session.store.getState().lastActionSeq).toBe(2)
+    expect(session.store.getState().lastAction).toBe('placed crate')
+
+    session.announce('hint: try the brush')
+    expect(session.store.getState().lastActionSeq).toBe(3)
+    expect(session.store.getState().lastAction).toBe('hint: try the brush')
+
+    // Back to the event spine: the SAME counter keeps climbing — one voice,
+    // one sequence, so the status bar's re-announcement parity trick works
+    // across both kinds of speech.
+    session.bus.undo()
+    expect(session.store.getState().lastActionSeq).toBe(4)
+    expect(session.store.getState().lastAction).toBe('undid: place crate')
+  })
+})
+
 describe('save settles the live gesture', () => {
   it('a half-painted stroke commits into the save: bytes, one entry, one event', () => {
     const storage = memoryStorage()
@@ -579,6 +745,165 @@ describe('save settles the live gesture', () => {
     if (stored.ok) {
       expect(stored.world.entities['e1']?.components['position']).toEqual({ x: 20.5, y: 12.5 })
     }
+  })
+})
+
+describe('setViewProjection — the curated view lens (ARCHITECTURE §4)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('rebuilds the stack around the new matrix, mirrors the snapshot, emits honestly — and never touches the document', () => {
+    const storage = memoryStorage()
+    storage.map.set('world', serializeWorld(createStarterWorld()))
+    const session = makeSession(storage) // boots 'saved': a lens flip must not dirty it
+    expect(session.viewProjection).toBeNull()
+    expect(session.store.getState().viewProjection).toBeNull()
+    expect(session.store.getState().primaryProjection).toBe('topdown')
+
+    const events: BuilderEvent[] = []
+    session.onEvent((event) => {
+      if (event.type === 'builder.view-projection-changed') events.push(event)
+    })
+    const docBefore = serializeWorld(session.doc)
+    const screenBefore = session.stack.worldToScreen({ x: 3, y: 2, z: 0 })
+
+    session.setViewProjection('iso')
+
+    // Same world point, different matrix: the stack really was rebuilt.
+    const screenAfter = session.stack.worldToScreen({ x: 3, y: 2, z: 0 })
+    expect(screenAfter).not.toEqual(screenBefore)
+    expect(session.viewProjection).toBe('iso')
+    expect(session.store.getState().viewProjection).toBe('iso')
+    // The event names the EFFECTIVE projections: primary → lens.
+    expect(events).toEqual([{ type: 'builder.view-projection-changed', from: 'topdown', to: 'iso' }])
+    // The announcement rode the one spine…
+    expect(session.store.getState().lastAction).toBe('switched to iso view')
+    // …and the DOCUMENT is untouched: same bytes, still 'saved'.
+    expect(serializeWorld(session.doc)).toBe(docBefore)
+    expect(session.store.getState().persistence.state).toBe('saved')
+
+    // Null returns to the primary, and the event says so by name.
+    session.setViewProjection(null)
+    expect(events).toHaveLength(2)
+    expect(events[1]).toEqual({ type: 'builder.view-projection-changed', from: 'iso', to: 'topdown' })
+    expect(session.viewProjection).toBeNull()
+  })
+
+  it('is a no-op on the same name — one switch, one event', () => {
+    const session = makeSession()
+    const events: BuilderEvent[] = []
+    session.onEvent((event) => {
+      if (event.type === 'builder.view-projection-changed') events.push(event)
+    })
+    session.setViewProjection(null) // already null
+    session.setViewProjection('profile')
+    session.setViewProjection('profile') // same lens again
+    expect(events).toHaveLength(1)
+  })
+
+  it('naming the primary from the null lens changes no matrix: no event, no rebuild', () => {
+    const session = makeSession()
+    const events: BuilderEvent[] = []
+    session.onEvent((event) => {
+      if (event.type === 'builder.view-projection-changed') events.push(event)
+    })
+    const stackBefore = session.stack
+    session.setViewProjection('topdown') // the starter primary's own name
+    expect(events).toHaveLength(0) // effective projection never changed
+    expect(session.stack).toBe(stackBefore) // same stack object: nothing rebuilt
+    expect(session.store.getState().viewProjection).toBe('topdown') // mirrored honestly all the same
+  })
+
+  it('loadWorld resets the lens — a new document arrives in its own primary', () => {
+    const session = makeSession()
+    session.setViewProjection('iso')
+    expect(session.viewProjection).toBe('iso')
+    session.loadWorld(otherWorld('fresh world'), 'new')
+    expect(session.viewProjection).toBeNull()
+    expect(session.store.getState().viewProjection).toBeNull()
+  })
+
+  it('a lens switch refits the camera: the zoom readout returns to 1', () => {
+    stubAnimationFrames()
+    const session = makeSession()
+    const { canvas, fire } = fakeCanvas()
+    const detach = session.attach(canvas)
+    fire('wheel', { deltaY: -1, clientX: 320, clientY: 210, preventDefault(): void {} })
+    expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
+
+    // The new matrix frames the whole world afresh — a student must never
+    // meet the iso lens through a viewport zoomed for top-down.
+    session.setViewProjection('iso')
+    expect(session.fast.last?.zoom).toBeCloseTo(1, 12)
+    detach()
+  })
+})
+
+describe('setViewProjection cancels the live gesture (mirroring setActiveLayer)', () => {
+  it('an open stroke dies with the lens switch: cells reverted, no history entry, no event', () => {
+    const session = makeSession()
+    const brush = createBrushTool(session)
+    session.addTool(brush) // 'brush' is the boot-default active tool
+    session.setActiveTile(4) // stone: really changes the grass it touches
+    const events: BuilderEvent[] = []
+    session.onEvent((event) => events.push(event))
+
+    // A stroke mid-gesture: down paints the cell live, no pointerup yet.
+    brush.onPointerDown(ev({ tile: { tx: 2, ty: 2 }, world: { x: 2.5, y: 2.5, z: 0 } }))
+    const ground = session.doc.layers.find((layer) => layer.id === 'ground')
+    if (ground === undefined) throw new Error('starter world lost its ground layer')
+    expect(getCell(ground, 2, 2)).toBe(4) // painted, live
+
+    // The lens switch: the stroke was recording under the OLD matrix, so
+    // it dies with it — cancelled, never committed.
+    session.setViewProjection('iso')
+    expect(getCell(ground, 2, 2)).toBe(1) // grass again: the stroke reverted
+    expect(session.store.getState().canUndo).toBe(false) // nothing entered history
+    expect(events.filter((event) => event.type === 'builder.tile-painted')).toEqual([])
+    // The switch itself still happened, announcement and all.
+    expect(session.viewProjection).toBe('iso')
+  })
+
+  it('a live drag dies with the lens switch: override gone, nothing committed', () => {
+    const session = makeSession()
+    const select = createSelectTool(session)
+    session.addTool(select)
+    session.setActiveTool('select')
+
+    // Press the starter player and drag past the threshold — mid-air now.
+    select.onPointerDown(ev({ screen: session.stack.worldToScreen({ x: 16.5, y: 12.5, z: 0 }) }))
+    select.onPointerMove(ev({ screen: session.stack.worldToScreen({ x: 20.2, y: 12.3, z: 0 }) }))
+    expect(session.preview.entityOverride).not.toBeNull()
+
+    const events: BuilderEvent[] = []
+    session.onEvent((event) => events.push(event))
+    session.setViewProjection('profile')
+
+    expect(session.preview.entityOverride).toBeNull() // the ghost is gone
+    expect(session.doc.entities['e1']?.components['position']).toEqual({ x: 16.5, y: 12.5 })
+    expect(events.filter((event) => event.type === 'builder.entity-moved')).toEqual([])
+    expect(session.store.getState().canUndo).toBe(false)
+  })
+
+  it('a no-op lens call leaves the live gesture alone — only real matrix changes cancel', () => {
+    const session = makeSession()
+    const brush = createBrushTool(session)
+    session.addTool(brush)
+    session.setActiveTile(4)
+    brush.onPointerDown(ev({ tile: { tx: 2, ty: 2 }, world: { x: 2.5, y: 2.5, z: 0 } }))
+
+    // Naming the primary from the null lens changes no matrix (pinned
+    // above): the stroke must survive it.
+    session.setViewProjection('topdown')
+    const ground = session.doc.layers.find((layer) => layer.id === 'ground')
+    if (ground === undefined) throw new Error('starter world lost its ground layer')
+    expect(getCell(ground, 2, 2)).toBe(4) // still painted: the stroke lives
+
+    // And it is still THE live gesture: Esc reverts it, proving the no-op
+    // switch neither cancelled nor committed it.
+    session.cancelGesture()
+    expect(getCell(ground, 2, 2)).toBe(1)
   })
 })
 

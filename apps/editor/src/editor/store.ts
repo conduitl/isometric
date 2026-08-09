@@ -58,7 +58,11 @@ export const EMPTY_SNAPSHOT: EditorSnapshot = {
   lastAction: null,
   lastActionSeq: 0,
   persistence: { state: 'unsaved', message: null },
-  lesson: null,
+  tutorial: null,
+  viewProjection: null,
+  // The starter contract's primary — honest before boot, overwritten the
+  // moment a real document mirrors in.
+  primaryProjection: 'topdown',
 }
 
 /** The one store the session writes and React reads. */

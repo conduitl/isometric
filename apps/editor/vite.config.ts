@@ -25,6 +25,8 @@ export default defineConfig({
       '@engine/world-format': r('../../packages/world-format/src/index.ts'),
       '@engine/tilemap': r('../../packages/tilemap/src/index.ts'),
       '@engine/testkit': r('../../packages/testkit/src/index.ts'),
+      '@engine/tutorial': r('../../packages/tutorial/src/index.ts'),
+      '@engine/lens': r('../../packages/lens/src/index.ts'),
       '@content/lessons': r('../../content/lessons/src/index.ts'),
     },
   },

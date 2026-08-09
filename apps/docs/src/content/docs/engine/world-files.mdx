@@ -1,0 +1,82 @@
+---
+title: World files
+description: A minimal, human-readable JSON format hardened for real children on real Chromebooks — and made for hand-editing.
+---
+
+A world file is the one artifact of this project that must outlive everything else. A kid's world
+built in a classroom this year should still open in a decade, whatever has happened to our
+libraries, our editor, or our opinions. So the file format is the project's declared **one-way
+door** (`docs/DECISIONS.md` D1) and gets the most conservative treatment in the system.
+
+## The format
+
+Minimal, human-readable JSON. This is roughly a whole file:
+
+```jsonc
+{
+  "formatVersion": 1,
+  "meta": { "worldId": "…", "name": "…" },
+  "settings": { "tileSize": 32, "primaryProjection": "topdown", "fixedDt": 0.0166, "seed": 12345 },
+  "nextEntityId": 43,
+  "tilesets": [ /* … */ ],
+  "layers": [ { "id": "l1", "width": 64, "height": 64, "elevation": 0, "cells": [ /* flat row-major */ ] } ],
+  "entities": [ /* plain objects; an id-keyed map in memory */ ]
+}
+```
+
+No binary blobs, no GID flip-bits, no clever encodings. `cells` is a flat row-major array —
+`index = y·width + x`, which is itself a taught formula. An entity is a plain object a 12-year-old
+can read in the console. Entity ids are per-world monotonic counters, never recycled, with
+`nextEntityId` persisted right in the file — stable identity is what selection, undo, and tutorial
+predicates key on.
+
+## Hand-editing is encouraged
+
+The glass-box ethos does not stop at the file boundary. Opening your world file in a text editor,
+reading it, and changing a number is a *supported activity* — arguably the Engineer tier's first
+lesson. Which means the loader must expect files edited by curious twelve-year-olds:
+
+- A lenient structural pre-check runs before anything else, so corruption produces a **diagnosis,
+  never a raw TypeError**.
+- Every loader error passes through a translation table with age-appropriate text. A raw validator
+  message reaching the UI is a named bug class.
+- A salvage mode recovers every parseable entity and layer from a damaged file and reports what was
+  lost, in student language.
+- The CI fixture corpus permanently contains deliberately truncated, hand-mangled, and
+  mid-write-crashed files — the loader is tested against sabotage, forever.
+
+Unknown keys *inside* an entity's `components` round-trip verbatim — that is the designed extension
+point for plugins. Unknown keys elsewhere drop on load→save, with a named, student-readable
+warning (D8).
+
+## Migrations
+
+`formatVersion` is an integer. When the format grows, a pure function `migrate[n]: vN → vN+1` joins
+an ordered chain run by a ~50-line owned runner. Old semantics are never mutated — only new
+versions are added — and the CI corpus keeps a file from **every** released version, so the whole
+chain is exercised on every commit. A change to any format rule is a version bump with a migration,
+never a quiet reinterpretation.
+
+## The two-slot ceremony
+
+The nightmare scenario: a save starts writing over the only good copy, the Chromebook lid closes
+halfway through, and the world that took three lessons to build is gone. The cure is an old,
+honorable trick — **never overwrite your only good copy**. Every save is a little ceremony over
+three storage slots:
+
+1. Write the new save to a **landing pad** (`.tmp`) — not over anything.
+2. Read the landing pad **back** and re-parse it. Not the text still in memory — what the storage
+   *actually kept*. Storage that ran out of room mid-write fails right here, loudly, while the good
+   copy is still untouched.
+3. Only after that proof, the promotion: the current good copy steps down to **backup** (only if it
+   still parses — a rotted file must never clobber a healthy backup), the proven save becomes the
+   good copy, and it is read back and re-parsed *once more*, because storage can lie twice.
+4. Only then is the landing pad cleared.
+
+Trace any crash through those steps and one invariant holds at every line: **a complete, parseable
+save always exists** — in the good copy, in the backup, or stranded on the landing pad. The editor
+surfaces the backup as "restore backup", and the ceremony is property-tested against storage
+implementations that deliberately lie, truncate, and throw.
+
+The full implementation, with this story in its header comment, is
+`packages/world-format/src/slots.ts` — assigned reading.

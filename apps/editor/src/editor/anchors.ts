@@ -29,6 +29,10 @@ export const ANCHOR_IDS = [
   'panel.inspector',
   'panel.layers',
   'panel.lesson',
+  'panel.lessonHint',
+  'panel.lessonPicker',
+  'panel.lessonReset',
+  'panel.lessonShowMe',
   'status.announcements',
   'status.coords',
   'status.saveState',
@@ -42,6 +46,9 @@ export const ANCHOR_IDS = [
   'toolbar.save',
   'toolbar.select',
   'toolbar.undo',
+  'toolbar.viewIso',
+  'toolbar.viewProfile',
+  'toolbar.viewTopdown',
   'toolbar.worldName',
   'viewport.canvas',
 ] as const
@@ -94,6 +101,14 @@ export const ANCHOR_HISTORY: ReadonlyArray<string> = [
   'toolbar.undo',
   'toolbar.worldName',
   'viewport.canvas',
+  // Phase 3 (tutorial + view lens):
+  'panel.lessonHint',
+  'panel.lessonPicker',
+  'panel.lessonReset',
+  'panel.lessonShowMe',
+  'toolbar.viewIso',
+  'toolbar.viewProfile',
+  'toolbar.viewTopdown',
 ]
 
 /** Resolve an id through the alias table to a live anchor, or null. */

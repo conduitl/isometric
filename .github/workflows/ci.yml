@@ -21,7 +21,8 @@ jobs:
       # The suite includes the replay-hash determinism tests (run-twice-compare),
       # the Phase 0 exit proof that the same seed + inputs give identical worlds.
       - run: pnpm test
-      # Docs build is a RELEASE gate, not a merge gate (docs/DECISIONS.md R9).
+      # Docs build is a RELEASE gate, not a merge gate (docs/DECISIONS.md R9)
+      # — it runs in .github/workflows/release.yml.
       - run: pnpm -r --filter '!docs' run build
       # Phase 2 e2e gates (apps/editor/e2e): the keyboard-only build-save-reload
       # flow and the axe-core accessibility scan. Playwright boots its own dev
@@ -33,3 +34,8 @@ jobs:
       # pnpm perf:editor + pnpm test:visual (Phase 2); the visual baselines are
       # blessed on the pinned local Chromium (linux CI baselines remain a
       # recorded chore). See docs/DECISIONS.md R10/R11.
+      # The docs build runs at RELEASE (pnpm docs:build in
+      # .github/workflows/release.yml), not per merge — R9. It compiles the
+      # live demos against the real @engine/* sources, so a release with a
+      # broken engine or broken docs cannot ship; a Starlight hiccup
+      # meanwhile never blocks an engine merge (hence '!docs' above).

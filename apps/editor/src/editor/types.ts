@@ -58,6 +58,7 @@
 import type { EntityId, World } from '@engine/core'
 import type { Vec2 } from '@engine/math'
 import type { TransformStack, WorldPoint } from '@engine/projection'
+import type { LensOverlaySpec, TutorialUiState, ViewProjectionName } from '@engine/tutorial'
 import type { StoreApi } from 'zustand/vanilla'
 import type { AnchorId } from './anchors'
 import type { BuilderEvent } from './events/builder'
@@ -342,17 +343,10 @@ export interface PersistenceState {
   readonly message: string | null
 }
 
-/** The lesson rail's mirror of the authoring harness (draft — the real
- * tutorial engine is Phase 3). */
-export interface LessonUiState {
-  readonly lessonId: string
-  readonly title: string
-  readonly stepIndex: number
-  readonly stepCount: number
-  readonly instruction: string
-  readonly hint: string | null
-  readonly done: boolean
-}
+/** The lesson rail renders @engine/tutorial's TutorialUiState from Phase 3
+ * on — the Phase 2 draft harness and its LessonUiState are gone; the real
+ * resumable step machine publishes into the snapshot's `tutorial` slice. */
+export type { TutorialUiState } from '@engine/tutorial'
 
 /**
  * The throttled snapshot React renders. Updated by the session after real
@@ -385,7 +379,18 @@ export interface EditorSnapshot {
    * again). */
   readonly lastActionSeq: number
   readonly persistence: PersistenceState
-  readonly lesson: LessonUiState | null
+  /** The lesson rail's slice, published by the tutorial engine through the
+   * host seam. Null = no lesson running. */
+  readonly tutorial: TutorialUiState | null
+  /** The active VIEW lens: null = the world's primary projection; a name =
+   * the X-ray re-projection the student switched to. Mirrors the toolbar's
+   * view buttons (aria-pressed) and never touches the document. */
+  readonly viewProjection: ViewProjectionName | null
+  /** The document's own primary projection, mirrored so the toolbar can
+   * answer "which view button is pressed when viewProjection is null?"
+   * without touching the document (null means "the primary" — this names
+   * which one that is). */
+  readonly primaryProjection: ViewProjectionName
 }
 
 /** Pointer-rate readout: written on every hover/cursor move, consumed by
@@ -480,13 +485,48 @@ export interface EditorSession {
   requestRender(): void
 
   // --- persistence (the two-slot ceremony of @engine/world-format) ---
+  /** Save the document — UNLESS the live document is a lesson fixture
+   * (origin 'fixture'): a fixture is a borrowed backdrop, and writing it
+   * into the student's save slot would destroy their world. While a fixture
+   * is live, save() refuses with a student-language message and touches no
+   * storage; the tutorial host parks the student's own world when a fixture
+   * loads and brings it back afterward. */
   save(): SaveOutcome
   restoreBackup(): LoadOutcome
   exportText(): string
   importText(text: string): LoadOutcome
-  /** Replace the document (load/import/new). Clears history, selection,
-   * preview; rebuilds renderers; emits builder.world-loaded. */
-  loadWorld(world: World, origin: 'boot' | 'load' | 'import' | 'restore' | 'new'): void
+  /** Replace the document (load/import/new/fixture). Clears history,
+   * selection, preview; rebuilds renderers; emits builder.world-loaded.
+   * Origin 'fixture' marks the document as a borrowed lesson backdrop:
+   * save() refuses while it is live (see save), and the flag clears the
+   * moment any other origin arrives. */
+  loadWorld(
+    world: World,
+    origin: 'boot' | 'load' | 'import' | 'restore' | 'new' | 'fixture' | 'park-restore',
+  ): void
+  /** True while the live document is a lesson fixture (origin 'fixture'). */
+  readonly fixtureActive: boolean
+  /** Speak through the editor's ONE voice: set lastAction (bumping
+   * lastActionSeq) so the status bar's live region announces it. The
+   * tutorial host uses this for step changes and revealed hints — screen
+   * readers hear the rail move without a second competing live region. */
+  announce(label: string): void
+
+  // --- the view lens + tutorial surface (Phase 3) ---
+  /** Switch the VIEW lens: re-project the same document through another
+   * projection (ARCHITECTURE §4's curated X-ray lens — "same world,
+   * different matrix" as a live experience). Null returns to the world's
+   * primary projection. The document is untouched; picking, tools, and the
+   * cursor keep working through the active stack (that they CAN is itself
+   * honest — the math never needed the art). Emits
+   * builder.view-projection-changed on real changes; rebuilds the stack and
+   * refits the camera. */
+  setViewProjection(name: ViewProjectionName | null): void
+  readonly viewProjection: ViewProjectionName | null
+  /** Replace the tutorial overlay set (drawn by @engine/lens above the
+   * scene, under the selection outlines). The tutorial host routes
+   * show-overlays effects here; an empty array clears. Render-only. */
+  setOverlays(overlays: ReadonlyArray<LensOverlaySpec>): void
 
   // --- builder.* events (the engine↔UI boundary emitter; lessons listen) ---
   onEvent(listener: (event: BuilderEvent) => void): () => void

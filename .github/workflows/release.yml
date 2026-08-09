@@ -1,0 +1,40 @@
+name: Release
+
+# The RELEASE gate (docs/DECISIONS.md R9): everything CI proves per merge,
+# PLUS the docs build. The docs compile their live demos against the real
+# @engine/* sources, so a release with a broken engine or broken docs cannot
+# ship — while a Starlight hiccup never blocks an ordinary engine merge
+# (ci.yml builds with --filter '!docs' for exactly that reason).
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # Setup mirrors ci.yml exactly: same pnpm action (version from the
+      # packageManager field), same Node major, same pnpm cache.
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm -r --filter '!docs' run build
+      # The R9 release gate itself: the docs build, run per release rather
+      # than per merge.
+      - run: pnpm docs:build
+      # e2e mirrors ci.yml: Playwright boots its own dev server; only its
+      # pinned Chromium needs installing here.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      # Perf + visual gates stay on the pinned local reference profile, NOT
+      # here — same scoping as ci.yml (docs/DECISIONS.md R10/R11).

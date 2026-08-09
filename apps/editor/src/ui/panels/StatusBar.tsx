@@ -16,9 +16,10 @@
  *
  * The announcer is the editor's single voice for screen readers: the
  * session's lastAction label ("painted 6 tiles", "undid: place crate")
- * plus the persistence message when a document was restored or a save
- * failed. role="status" + polite, visually hidden but ALWAYS in the DOM —
- * a live region that mounts and unmounts is a live region that misses
+ * plus the persistence message whenever there is one — a restored backup,
+ * a failed save, or the parked-world story while a lesson fixture is live.
+ * role="status" + polite, visually hidden but ALWAYS in the DOM — a live
+ * region that mounts and unmounts is a live region that misses
  * announcements.
  */
 
@@ -73,7 +74,11 @@ export function StatusBar({ session }: { session: EditorSession }): ReactElement
   // readers re-announce every repeat.
   const spoken: string[] = []
   if (lastAction !== null) spoken.push(lastActionSeq % 2 === 1 ? `${lastAction}\u200B` : lastAction)
-  if ((persistence.state === 'restored' || persistence.state === 'error') && persistence.message !== null) {
+  // ANY persistence message is worth speaking \u2014 restored backups and failed
+  // saves, but also the parked-world story while a lesson fixture is live
+  // (a student on the showcase island must keep hearing that their own
+  // world is parked and safe, not silence).
+  if (persistence.message !== null) {
     spoken.push(persistence.message)
   }
 

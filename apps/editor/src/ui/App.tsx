@@ -27,7 +27,9 @@
 
 import { useEffect } from 'react'
 import type { ReactElement } from 'react'
+import type { TutorialEngine } from '@engine/tutorial'
 import { useStore } from 'zustand'
+import type { EditorTutorialHost } from '../editor/tutorial-host'
 import type { EditorSession, EditorSnapshot } from '../editor/types'
 import { EngineViewport } from './EngineViewport'
 import { EntitiesPanel } from './panels/EntitiesPanel'
@@ -56,8 +58,20 @@ function targetIsEditable(target: EventTarget | null): boolean {
 }
 
 /** The editor shell: toolbar over left rail / viewport / right rail over
- * status bar, with the global keyboard attached for its lifetime. */
-export function App({ session }: { session: EditorSession }): ReactElement {
+ * status bar, with the global keyboard attached for its lifetime. The
+ * tutorial engine and its editor host ride down alongside the session for
+ * the one panel that drives them (the lesson rail; the host carries the
+ * parked-world verbs) — panels talk to both the same way they talk to the
+ * session: named methods in, snapshot slices out. */
+export function App({
+  session,
+  engine,
+  host,
+}: {
+  session: EditorSession
+  engine: TutorialEngine
+  host: EditorTutorialHost
+}): ReactElement {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (!(e.ctrlKey || e.metaKey)) return
@@ -114,7 +128,7 @@ export function App({ session }: { session: EditorSession }): ReactElement {
       <div className="frame-right">
         <InspectorPanel session={session} />
         <EntitiesPanel session={session} />
-        <LessonRail session={session} />
+        <LessonRail session={session} engine={engine} host={host} />
       </div>
 
       <footer className="frame-status">

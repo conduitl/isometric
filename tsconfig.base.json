@@ -21,6 +21,8 @@
       "@engine/world-format": ["packages/world-format/src/index.ts"],
       "@engine/tilemap": ["packages/tilemap/src/index.ts"],
       "@engine/testkit": ["packages/testkit/src/index.ts"],
+      "@engine/tutorial": ["packages/tutorial/src/index.ts"],
+      "@engine/lens": ["packages/lens/src/index.ts"],
       "@content/lessons": ["content/lessons/src/index.ts"]
     }
   }

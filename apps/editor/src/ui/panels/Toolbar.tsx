@@ -35,12 +35,23 @@ import { anchor } from '../../editor/anchors'
 import type { EditorSession } from '../../editor/types'
 import { useSnapshot } from '../App'
 
+/** What hovering a non-primary view button promises — the whole lesson in
+ * one sentence. */
+const XRAY_TITLE = 'X-ray view — same world, different matrix'
+
 /** The header toolbar: tool toggles, undo/redo, and the file ceremony. */
 export function Toolbar({ session }: { session: EditorSession }): ReactElement {
   const activeToolId = useSnapshot(session, (s) => s.activeToolId)
   const canUndo = useSnapshot(session, (s) => s.canUndo)
   const canRedo = useSnapshot(session, (s) => s.canRedo)
   const worldName = useSnapshot(session, (s) => s.worldName)
+  const viewProjection = useSnapshot(session, (s) => s.viewProjection)
+  const primaryProjection = useSnapshot(session, (s) => s.primaryProjection)
+
+  /** The projection the picture is currently in: null means "the primary",
+   * and the snapshot's primaryProjection names which button that is — so
+   * exactly one view button always reads pressed. */
+  const effectiveView = viewProjection ?? primaryProjection
 
   /** Student-language refusal from the last import/restore, or null. */
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -134,6 +145,69 @@ export function Toolbar({ session }: { session: EditorSession }): ReactElement {
           onClick={() => session.setActiveTool('placer')}
         >
           Placer<span className="toolbar-key">E</span>
+        </button>
+      </div>
+
+      <div className="toolbar-group" role="radiogroup" aria-label="view">
+        {/* The curated view lens (ARCHITECTURE §4): re-project the SAME world
+            through another matrix. Clicking the primary's own button returns
+            to the null lens (the document's projection, undecorated); any
+            other button sets the X-ray lens — and says so in its title. The
+            document is untouched either way. Spelled out longhand — three
+            near-identical buttons — because the anchor tripwire scans for
+            LITERAL ids at attachment sites (anchors.test.ts).
+
+            A radiogroup, not three toggles: exactly one view is ever the
+            picture on screen, and three independent aria-pressed buttons
+            announced as three switches that could each be on — a lie about
+            the model. role=radio + aria-checked says "one of three",
+            which is the truth. The canonical radiogroup pattern would add
+            roving tabindex + arrow-key movement; deliberately SKIPPED:
+            these are toolbar buttons the keyboard flow already reaches by
+            Tab (the e2e tutorial flow pins Tab-reachability of all three),
+            and taking two of them out of the tab order without also
+            shipping the arrow-key handling would strand keyboard users.
+            All three stay plain Tab stops.
+
+            The X-ray explanation lives in ONE visually-hidden span that the
+            non-primary buttons aria-describedby: title= alone is mouse-only
+            (assistive tech and keyboard users never see a tooltip), so the
+            title stays for hover and the span speaks for everyone else. */}
+        <span id="toolbar-xray-note" className="visually-hidden">
+          {XRAY_TITLE}
+        </span>
+        <button
+          type="button"
+          role="radio"
+          data-anchor={anchor('toolbar.viewTopdown')}
+          aria-checked={effectiveView === 'topdown'}
+          title={primaryProjection === 'topdown' ? undefined : XRAY_TITLE}
+          aria-describedby={primaryProjection === 'topdown' ? undefined : 'toolbar-xray-note'}
+          onClick={() => session.setViewProjection(primaryProjection === 'topdown' ? null : 'topdown')}
+        >
+          Top-down
+        </button>
+        <button
+          type="button"
+          role="radio"
+          data-anchor={anchor('toolbar.viewIso')}
+          aria-checked={effectiveView === 'iso'}
+          title={primaryProjection === 'iso' ? undefined : XRAY_TITLE}
+          aria-describedby={primaryProjection === 'iso' ? undefined : 'toolbar-xray-note'}
+          onClick={() => session.setViewProjection(primaryProjection === 'iso' ? null : 'iso')}
+        >
+          Iso
+        </button>
+        <button
+          type="button"
+          role="radio"
+          data-anchor={anchor('toolbar.viewProfile')}
+          aria-checked={effectiveView === 'profile'}
+          title={primaryProjection === 'profile' ? undefined : XRAY_TITLE}
+          aria-describedby={primaryProjection === 'profile' ? undefined : 'toolbar-xray-note'}
+          onClick={() => session.setViewProjection(primaryProjection === 'profile' ? null : 'profile')}
+        >
+          Profile
         </button>
       </div>
 

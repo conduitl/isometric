@@ -14,11 +14,13 @@
   "dependencies": {
     "@content/lessons": "workspace:*",
     "@engine/core": "workspace:*",
+    "@engine/lens": "workspace:*",
     "@engine/math": "workspace:*",
     "@engine/projection": "workspace:*",
     "@engine/renderer": "workspace:*",
     "@engine/renderer-canvas2d": "workspace:*",
     "@engine/tilemap": "workspace:*",
+    "@engine/tutorial": "workspace:*",
     "@engine/world-format": "workspace:*",
     "immer": "catalog:",
     "react": "catalog:",

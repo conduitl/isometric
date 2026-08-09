@@ -29,7 +29,30 @@ loop pauses and single-steps; "how does clicking work?" is literally answered by
 
 ## Status
 
-**Phase 2 complete (pending commit); Phases 0–1 shipped.** The world editor is usable end to end
+**Phase 3 complete (pending commit); the classroom pilot is the remaining v1 launch gate.**
+The tutorial engine ships: lessons are data (`@engine/tutorial` — the frozen `builder.*`
+vocabulary with type-pinned payload governance, world-state + event predicates with **no UI-state
+predicate type at all**, a resumable step machine whose progress survives reload), overlays make
+the math visible (`@engine/lens` — the live right-triangle that labels itself 3-4-5 **while you
+drag the crate**, world spotlights, and the in-house DOM masked spotlight), and three lessons run
+end to end in the editor: *First tiles* (coordinates), *The distance picture*
+(distance-as-Pythagoras, moment-gated so leftover crates can never pre-satisfy a step), and
+*Three views* (the perspective-switch reveal on a showcase island — view-only, with the student's
+own world parked and save refused until they come back to it). Zero steps anywhere gate on
+"click Next"; every step has escalating hints (keyboard path included) and a reset escape; the
+lesson-replay corpus drives every shipped step through the real engine in CI; hot-reload lesson
+authoring is proven (edit a lesson file, the rail follows, no build). The docs site is live
+(`pnpm docs:build`, 9 pages) with a projection demo importing the real package sources, and the
+R9 release gate exists as a workflow. The adversarial review pass confirmed 29 findings (zero
+refuted) — headliners: the freeze test pinned payload *names* but not *types*; the step machine
+had no reentrancy guard against its own effects' events; a restored parked world wore a lying
+'saved' badge; and the flagship drag-the-triangle moment silently didn't happen — all fixed with
+regression tests. Suite: 736 unit tests, 14 visual baselines, 9 e2e tests (twice, retries 0),
+axe clean across four tutorial states, drag-paint at 8.3 ms against the 16.7 ms budget.
+
+Earlier: **Phase 2** — the keyboard-first world editor (split undo substrate, two-slot saves with
+backup restore, tools as plugins, `builder.*` vocabulary drafted, math/projection/core frozen at
+1.0.0 — D9). The world editor is usable end to end
 (`pnpm dev:editor`): paint tiles, place/move/rename/delete entities, full undo/redo on the split
 substrate (Immer patches for entities, run-inverse strokes for tiles), atomic saves with backup
 restore surfaced in the UI, and every operation works **entirely from the keyboard** — proven by a

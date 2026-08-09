@@ -30,6 +30,7 @@ const BASE_UI: RenderUi = {
   entityOverride: null,
   activeLayerId: 'ground',
   grid: false,
+  overlays: [],
 }
 
 /** A raster factory with no pixel store, counting how many rasters were
@@ -120,6 +121,47 @@ describe('createSceneRenderer', () => {
     expect(ghostCircle?.x).not.toBeCloseTo(committedCircle?.x as number, 9)
   })
 
+  it('the entity override reaches the lens pass: lesson ink follows the drag ghost', () => {
+    // Lesson-02's flagship moment, at the render.ts seam: while the starter
+    // player (entity e1, committed at (16.5, 12.5)) is mid-drag, the
+    // right-triangle overlay's marker endpoint must draw at the OVERRIDE
+    // point — the same substitution the marker dot gets — so the numbers
+    // move while the student drags, not on drop.
+    const { doc, stack, renderer } = setup()
+    const overlays: RenderUi['overlays'] = [
+      { kind: 'right-triangle', a: { marker: 'player' }, b: { x: 19.5, y: 16.5 } },
+    ]
+
+    const plain = createNullBackend()
+    renderer.render(plain, doc, stack, SIZE, { ...BASE_UI, overlays })
+    // The hypotenuse is the frame's only gold 3-wide stroke (@engine/lens's
+    // own weight); its first point is the marker-resolved `a`.
+    const committed = frame(plain.frames).find(
+      (cmd) => cmd.kind === 'polyline' && cmd.stroke === '#ffd166' && cmd.lineWidth === 3,
+    )
+    expect(committed).toBeDefined()
+
+    const overridePoint = { x: 10, y: 5, z: 0 }
+    const dragged = createNullBackend()
+    renderer.render(dragged, doc, stack, SIZE, {
+      ...BASE_UI,
+      overlays,
+      entityOverride: { id: 'e1', point: overridePoint },
+    })
+    const ghost = frame(dragged.frames).find(
+      (cmd) => cmd.kind === 'polyline' && cmd.stroke === '#ffd166' && cmd.lineWidth === 3,
+    )
+    expect(ghost).toBeDefined()
+
+    const expected = stack.worldToScreen(overridePoint)
+    const ghostPoints = ghost?.points as ReadonlyArray<{ x: number; y: number }>
+    const committedPoints = committed?.points as ReadonlyArray<{ x: number; y: number }>
+    expect(ghostPoints[0]?.x).toBeCloseTo(expected.x, 9)
+    expect(ghostPoints[0]?.y).toBeCloseTo(expected.y, 9)
+    // And it MOVED: the committed frame's hypotenuse started elsewhere.
+    expect(ghostPoints[0]?.x).not.toBeCloseTo(committedPoints[0]?.x as number, 9)
+  })
+
   it('grid: true adds one polyline per grid line over the active layer', () => {
     const { doc, stack, renderer } = setup()
     const backend = createNullBackend()
@@ -159,6 +201,45 @@ describe('createSceneRenderer', () => {
     // The outline's first corner is the cell's own (tx, ty) corner on screen.
     const corner = stack.worldToScreen({ x: 2, y: 3, z: 0 })
     const points = cursor?.points as ReadonlyArray<{ x: number; y: number }>
+    expect(points[0]?.x).toBeCloseTo(corner.x, 9)
+    expect(points[0]?.y).toBeCloseTo(corner.y, 9)
+  })
+
+  it('lens overlays draw between the grid and the selection outline', () => {
+    // The pinned sandwich: world, grid, LESSON INK, then the pick overlays —
+    // the lesson's picture must never hide the very cell the student is
+    // about to click (render.ts documents the order; this pins it).
+    const { doc, stack, renderer } = setup()
+    const backend = createNullBackend()
+    renderer.render(backend, doc, stack, SIZE, {
+      ...BASE_UI,
+      grid: true,
+      selection: { kind: 'tile', tile: { layerId: 'ground', tx: 4, ty: 5, elevation: 0 } },
+      overlays: [{ kind: 'cell-highlight', tx: 2, ty: 3 }],
+    })
+    const commands = frame(backend.frames)
+
+    // The lens cell highlight is the only 2.5-wide stroke in the frame
+    // (grid 1, markers 1.5, selection 2 — @engine/lens's own weight).
+    const overlayAt = commands.findIndex((cmd) => cmd.kind === 'polyline' && cmd.lineWidth === 2.5)
+    const lastGridAt = commands.reduce(
+      (last, cmd, at) => (cmd.kind === 'polyline' && cmd.stroke === '#2a3242' ? at : last),
+      -1,
+    )
+    const selectionAt = commands.findIndex(
+      (cmd) => cmd.kind === 'polyline' && cmd.stroke === '#8ab4ff' && cmd.lineWidth === 2,
+    )
+    expect(overlayAt).toBeGreaterThan(-1)
+    expect(lastGridAt).toBeGreaterThan(-1)
+    expect(selectionAt).toBeGreaterThan(-1)
+    expect(overlayAt).toBeGreaterThan(lastGridAt) // above the grid…
+    expect(overlayAt).toBeLessThan(selectionAt) // …below the selection
+
+    // And the highlight really is the lesson's cell: the outline's first
+    // corner projects from (tx, ty) on the ground plane.
+    const overlay = commands[overlayAt]
+    const corner = stack.worldToScreen({ x: 2, y: 3, z: 0 })
+    const points = overlay?.points as ReadonlyArray<{ x: number; y: number }>
     expect(points[0]?.x).toBeCloseTo(corner.x, 9)
     expect(points[0]?.y).toBeCloseTo(corner.y, 9)
   })

@@ -1,80 +1,32 @@
 /**
- * The boundary emitter, pinned. Small surface, load-bearing promises:
- * synchronous delivery in subscription order (lessons see the event in the
- * same instant the action completed), unsubscribe by returned function, and
- * containment — one listener's crash never starves the others, because a
- * broken lesson panel must never eat a save event.
+ * The events/builder SHIM, pinned. Since the Phase 3 freeze the vocabulary
+ * lives in @engine/tutorial; the app keeps a thin re-export at
+ * src/editor/events/builder so its import sites stay stable. This test is
+ * the only app-specific fact left to assert: the shim hands out THE SAME
+ * objects as the package — one emitter factory, one alias table, one
+ * vocabulary. (Emitter behavior and freeze governance are package coverage
+ * now: packages/tutorial/test/freeze.test.ts.)
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { BUILDER_EVENT_ALIASES as tutorialAliases, createBuilderEmitter as tutorialCreate } from '@engine/tutorial'
+import type { BuilderEvent as TutorialBuilderEvent } from '@engine/tutorial'
 import { BUILDER_EVENT_ALIASES, createBuilderEmitter } from '../src/editor/events/builder'
 import type { BuilderEvent } from '../src/editor/events/builder'
 
-const savedEvent: BuilderEvent = { type: 'builder.world-saved', worldId: 'w7' }
-const renamedEvent: BuilderEvent = { type: 'builder.world-renamed', from: 'a', to: 'b' }
-
-describe('createBuilderEmitter', () => {
-  it('delivers synchronously, in subscription order', () => {
-    const emitter = createBuilderEmitter()
-    const order: string[] = []
-    emitter.on(() => order.push('first'))
-    emitter.on(() => order.push('second'))
-    emitter.on(() => order.push('third'))
-    emitter.emit(savedEvent)
-    // No await, no flush: the emit call itself did all the delivering.
-    expect(order).toEqual(['first', 'second', 'third'])
+describe('the events/builder shim', () => {
+  it('re-exports the frozen package values by identity — no app-side copy', () => {
+    expect(createBuilderEmitter).toBe(tutorialCreate)
+    expect(BUILDER_EVENT_ALIASES).toBe(tutorialAliases)
   })
 
-  it('hands every listener the same event object', () => {
-    const emitter = createBuilderEmitter()
-    const seen: BuilderEvent[] = []
-    emitter.on((event) => seen.push(event))
-    emitter.on((event) => seen.push(event))
-    emitter.emit(savedEvent)
-    expect(seen).toEqual([savedEvent, savedEvent])
-    expect(seen[0]).toBe(savedEvent)
-  })
-
-  it('unsubscribing stops future deliveries without touching other listeners', () => {
-    const emitter = createBuilderEmitter()
-    const received: string[] = []
-    const off = emitter.on((event) => received.push(`a:${event.type}`))
-    emitter.on((event) => received.push(`b:${event.type}`))
-    emitter.emit(savedEvent)
-    off()
-    emitter.emit(renamedEvent)
-    expect(received).toEqual(['a:builder.world-saved', 'b:builder.world-saved', 'b:builder.world-renamed'])
-  })
-
-  it('a throwing listener is contained: later listeners still hear the event', () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    try {
-      const emitter = createBuilderEmitter()
-      const received: string[] = []
-      emitter.on(() => {
-        throw new Error('broken lesson panel')
-      })
-      emitter.on((event) => received.push(event.type))
-      emitter.emit(savedEvent)
-      expect(received).toEqual(['builder.world-saved'])
-      // The failure is reported, not swallowed silently — and not rethrown.
-      expect(errorSpy).toHaveBeenCalledTimes(1)
-    } finally {
-      errorSpy.mockRestore()
-    }
-  })
-
-  it('emitting with no listeners is a quiet no-op', () => {
-    const emitter = createBuilderEmitter()
-    expect(() => emitter.emit(savedEvent)).not.toThrow()
-  })
-})
-
-describe('freeze discipline', () => {
-  it('the alias table is empty until the Phase 3 freeze', () => {
-    // This test IS the reminder: nothing can need an alias before anything
-    // is frozen (D4). The first legitimate entry arrives only when a frozen
-    // name is superseded — and lands here with a lesson-replay test beside it.
-    expect(Object.keys(BUILDER_EVENT_ALIASES)).toHaveLength(0)
+  it('re-exports the frozen types, not lookalikes (compile-time check made visible)', () => {
+    // Mutual assignability: each union accepts the other's values. If the
+    // shim ever grew a local BuilderEvent again, one of these lines would
+    // stop compiling.
+    const fromShim: BuilderEvent = { type: 'builder.world-saved', worldId: 'w7' }
+    const toTutorial: TutorialBuilderEvent = fromShim
+    const backToShim: BuilderEvent = toTutorial
+    expect(backToShim).toBe(fromShim)
   })
 })

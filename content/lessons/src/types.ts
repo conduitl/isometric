@@ -1,101 +1,82 @@
 /**
- * The lesson-step schema — DRAFT. This file is for curriculum AUTHORS.
+ * The lesson schema, v1 — this file is for curriculum AUTHORS.
  *
- * If you write lessons, this is your whole vocabulary. A lesson is DATA: a
- * plain object you could print on paper, with no code hiding anywhere in it.
- * That is a rule, not a habit — no field of a lesson may ever hold a
- * function, and no step may ever ask about the state of the user interface
- * (docs/ARCHITECTURE.md §9). Here is why, because the why is what keeps a
- * decade of curriculum alive:
+ * At the Phase 3 freeze the schema graduated from this package's draft into
+ * @engine/tutorial (docs/ARCHITECTURE.md §9, docs/DECISIONS.md D4). This
+ * file now re-exports the one frozen copy, so a lesson you write here is
+ * checked against exactly the types the tutorial engine executes. The heart
+ * of the schema did not move an inch: a lesson is DATA — a plain object you
+ * could print on paper — and no step may ever ask about the user interface.
+ * A step completes on a frozen `builder.*` event or on a fact about the
+ * world, never on "the panel is open". That absence is a parse-time
+ * guarantee, and it is what keeps a decade of curriculum alive through
+ * every editor redesign.
  *
- * The editor's buttons and panels WILL move. Toolbars get redesigned,
- * palettes get merged, keyboard shortcuts change. If a step could say
- * "the student clicked the brush button", every one of those redesigns
- * would silently break shipped lessons — a curriculum with a ten-year
- * lifespan chained to this month's layout. So there is deliberately no
- * "clicked the button" predicate and no "panel is open" predicate. A step
- * can only ask two kinds of question:
+ * ## What changed from the Phase 2 draft
  *
- * 1. **What did the student DO, in world terms?** — a semantic event like
- *    `builder.tile-painted` ("a brush gesture changed some cells") or
- *    `builder.world-saved`. These names are the editor's promise to
- *    lessons: they describe the world-changing intention, never the
- *    gesture mechanics, and after the Phase 3 freeze they never change
- *    meaning (old names live forever in an alias table).
- * 2. **What is TRUE in the world now?** — "cell (5, 4) holds water",
- *    "a crate entity exists". These read the saved-world truth directly,
- *    so they stay correct through any amount of undo, redo, or replay.
+ * - **`hint` became `hints`, an array with AT LEAST ONE entry.** A stuck
+ *   student is a P1 bug, so every step must ship an escape — and now the
+ *   escapes escalate: hints[0] is the gentle nudge, hints[1] the sharper
+ *   spell-it-out (mention the keyboard path — some students never touch the
+ *   mouse). Validation rejects a step with an empty hints array.
+ * - **New required `arc` field on the lesson** ('coordinates', 'distance',
+ *   'perspectives'): the curriculum's grouping, shown in the rail.
+ * - **New optional `fixture`** on the lesson: a fixture-world id the host
+ *   loads before the lesson starts (the perspective-reveal showcase runs on
+ *   'showcase-island'). Absent = the student's own world, untouched.
+ * - **New optional `target`** on a step ({@link StepTarget}): where the
+ *   editor points the student's attention — a piece of chrome by ANCHOR id
+ *   (registry-governed, D5 — see apps/editor/src/editor/anchors.ts for the
+ *   legal ids), a world cell, or a marker entity. Chrome targets get the
+ *   DOM spotlight; world targets are highlighted by the lens layer.
+ * - **New optional `onEnter`** on a step ({@link StepEffect}): declarative
+ *   effects applied when the step begins — switch the view lens, show lens
+ *   overlays ({@link LensOverlaySpec}, whose endpoints may be fixed points
+ *   or live `{ marker }` references — {@link OverlayPoint}). Effects are
+ *   data; the host applies them.
+ * - **Two new predicate kinds** ({@link StepPredicate}): `entity-at` (an
+ *   entity with a marker stands ON a cell) and `entity-distance` (the
+ *   ground-plane distance between two marker entities — the arc-2
+ *   Pythagoras predicate, with a small float-dust tolerance).
+ * - **`all`/`any` composition, with one rule:** NO EVENT LEAVES inside a
+ *   composition. An event is a moment and a composition is a state of the
+ *   world; "all of [a moment, a fact]" cannot be honestly waited on, so the
+ *   validator rejects it. Compose world facts; gate on single events.
  *
  * ## Event granularity, in one breath
  *
  * Events fire once per COMPLETED intention: a drag that paints 40 cells is
  * ONE `builder.tile-painted`; a cancelled drag (Esc) is NOTHING; undo emits
  * its own `builder.command-undone`, never a fake replay of the original.
- * A step gated on an event can therefore never half-fire or fire at
- * pointer speed. The full conventions live in the vocabulary file's header:
- * apps/editor/src/editor/events/builder.ts.
+ * The full conventions live in the frozen vocabulary's header:
+ * packages/tutorial/src/events.ts.
  *
- * ## Draft status
- *
- * The real tutorial engine arrives in Phase 3, where this schema formalizes
- * into @engine/tutorial and the event vocabulary freezes. Until then the
- * shape below is a working draft — good enough to author real steps today,
- * consumer-tested by the editor's lesson rail, and expected to grow (step
- * targets/highlights, onEnter effects, richer predicates). What will NOT
- * change is the rule above: world facts and semantic events only.
+ * Before a lesson ships, `validateLessons` from @engine/tutorial must
+ * return no problems for it — the content test in this package runs it over
+ * every shipped lesson on every PR.
  */
 
-/**
- * One lesson: an id, a human title, and the steps in teaching order.
- * Ids are kebab-case ('first-tiles') and permanent — progress tracking and
- * the lesson-replay corpus will key on them, so pick a name you can keep.
- */
-export interface LessonDraft {
-  readonly id: string
-  readonly title: string
-  readonly steps: readonly LessonStepDraft[]
-}
+import type { Lesson, LessonStep, StepPredicate } from '@engine/tutorial'
 
-/**
- * One step: what the rail shows, and how the editor knows it is complete.
- *
- * `instruction` is mini-markdown — plain prose with `**bold**` and
- * `` `code` `` spans only, blank line for a new paragraph (the rail's tiny
- * in-house formatter supports exactly that, nothing more). `hint` is the
- * gentler second try; the review checklist requires one on every shipped
- * step, because a stuck student is a P1 bug.
- */
-export interface LessonStepDraft {
-  readonly id: string
-  readonly title: string
-  readonly instruction: string
-  readonly hint?: string
-  readonly completion: StepPredicateDraft
-}
+export type {
+  Lesson,
+  LessonStep,
+  StepPredicate,
+  StepEffect,
+  StepTarget,
+  LensOverlaySpec,
+  OverlayPoint,
+} from '@engine/tutorial'
 
-/**
- * The three questions a step may ask. Note what is missing on purpose:
- * nothing here can mention a button, a panel, a pointer, or a pixel.
- *
- * - `event` — completes the moment the editor emits a builder.* event with
- *   this `type` ("the student painted", "the student saved"). Use it when
- *   the DOING matters more than the result: any paint, any save.
- * - `tile-at` — completes when cell (tx, ty) holds the given tile value.
- *   `tile` omitted means "any tile, just not empty"; `tile: 0` means "this
- *   cell is empty" (an erasing exercise). `layerId` omitted means "on any
- *   layer". Use it when the RESULT matters: the student can paint, erase,
- *   undo, and try again — the step completes when the world is right.
- * - `entity-exists` — completes when some entity with this marker kind
- *   ('crate', 'tree', …) exists in the world. Same spirit: however they
- *   got there, a crate in the world is a crate in the world.
- */
-export type StepPredicateDraft =
-  | { readonly kind: 'event'; readonly type: string }
-  | {
-      readonly kind: 'tile-at'
-      readonly tx: number
-      readonly ty: number
-      readonly tile?: number
-      readonly layerId?: string
-    }
-  | { readonly kind: 'entity-exists'; readonly marker: string }
+/** @deprecated The draft name from Phase 2 — the schema froze as
+ * {@link Lesson} in @engine/tutorial. Kept so mid-phase code keeps
+ * compiling; new code says `Lesson`. */
+export type LessonDraft = Lesson
+
+/** @deprecated The draft name from Phase 2 — the schema froze as
+ * {@link LessonStep} in @engine/tutorial. New code says `LessonStep`. */
+export type LessonStepDraft = LessonStep
+
+/** @deprecated The draft name from Phase 2 — the schema froze as
+ * {@link StepPredicate} in @engine/tutorial. New code says `StepPredicate`. */
+export type StepPredicateDraft = StepPredicate

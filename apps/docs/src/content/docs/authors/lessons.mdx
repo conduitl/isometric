@@ -1,0 +1,142 @@
+---
+title: Lessons are data
+description: The v1 lesson schema — predicates over world facts and frozen events, effects, targets, and the duties that keep a decade of curriculum replayable.
+---
+
+A lesson is **data, not code**: a plain JSON-serializable object a curriculum author writes by hand
+and `@engine/tutorial` executes. You can ship a lesson without ever building the engine, and the
+hot-reload workflow below is built on exactly that fact.
+
+This page is the schema tour. The working reference — worked examples, the formatting rules, the
+review checklist, the starter-world map — is `content/lessons/README.md` in the repository; keep it
+open while you write.
+
+## The shape of a lesson
+
+```ts
+interface LessonStep {
+  id: string                        // kebab-case, permanent — pick a keeper
+  title: string                     // the rail's step heading
+  instruction: string               // mini-markdown: paragraphs, **bold**, `code`
+  hints: string[]                   // at least one, always (validated)
+  target?: StepTarget               // where "show me" points: an anchor or a world thing
+  onEnter?: StepEffect[]            // declarative setup: switch the view lens, show overlays
+  completion: StepPredicate         // when is the step done? THE load-bearing field
+}
+
+interface Lesson {
+  id: string
+  title: string
+  arc: string                       // 'coordinates', 'distance', 'perspectives'
+  fixture?: string                  // a fixture world to load; absent = the student's own world
+  steps: LessonStep[]
+}
+```
+
+Every step must ship at least one hint, and every lesson should end with the student *keeping*
+something — a saved world is the canonical ending. Both are exit criteria, not style advice.
+
+## Predicates: the two questions you may ask
+
+`completion` decides when a step is done, and there are exactly two kinds of question it can ask —
+what the student **did** (a frozen semantic event occurred) and what is now **true** (a fact about
+the world document):
+
+| kind | completes when | typical use |
+|---|---|---|
+| `event` | a frozen `builder.*` event fires, optionally with top-level payload fields matching `where` | "paint anything", "save your world", "switch to the iso view" |
+| `tile-at` | cell `(tx, ty)` holds the right tile | "make the world look like this" — survives undo and repainting |
+| `entity-exists` | at least n entities with a marker exist | "there is a crate in the world", however it got there |
+| `entity-at` | an entity with a marker stands on cell `(tx, ty)` | "move the player onto the dock" |
+| `entity-distance` | the ground-plane distance between two marked entities equals a value (within a small tolerance) | the arc-2 Pythagoras step: "place the crate exactly 5 from the player" |
+| `all` / `any` | composition, for the rare step that needs it | "painted water *and* saved" |
+
+`event` predicates match against the frozen vocabulary in `@engine/tutorial`'s `events.ts` —
+twelve `builder.*` event types at the Phase 3 freeze, from `builder.tile-painted` to
+`builder.view-projection-changed`. The `where` matcher is shallow and scalar-only on purpose: it is
+deliberately too weak to smuggle UI state or deep structure into a predicate. One destination-shaped
+exception exists for `builder.entity-moved` only: an optional `toCell: { tx, ty }` completes the
+step only when the move *lands* in that cell (the event's `to` position floors to it) — the
+pre-satisfaction-proof way to say "move it HERE", since a moment that names its destination cannot
+be satisfied by something already standing there.
+
+## The rule with no exceptions: no UI predicates
+
+**The step schema has no UI-state predicate type at all.** Not discouraged — unrepresentable. There
+is no way to write "the panel is open", "the button was clicked", or "the pointer is over the
+canvas", and this absence is a parse-time guarantee, not a review comment.
+
+Why so absolute? Because buttons move and a decade of curriculum must not. Editor chrome gets
+renamed, redesigned, and refactored continuously; the *world* and the *frozen event vocabulary*
+are governed contracts (`docs/DECISIONS.md` D4/D5) that are additive-only forever, with a permanent
+alias table so even a superseded event name keeps resolving. A lesson written against world facts
+and frozen events survives every editor refactor that will ever happen; a lesson written against
+the interface dies with the first redesign. If you find yourself wanting a UI predicate, the step
+is asking about the interface instead of the world — reshape it around what becomes *true* or what
+got *done*.
+
+(Steps may still *point at* chrome: a `target` of kind `anchor` references a `data-anchor` id from
+the versioned anchor registry, which is governed exactly like the event vocabulary — renaming an
+anchor without an alias fails CI. Pointing is allowed; *gating* is not.)
+
+## How events fire: gesture granularity
+
+Events are emitted at the granularity of a completed intention — conventions frozen alongside the
+vocabulary, so your steps behave predictably:
+
+- **One event per completed gesture, never per frame or per increment.** A drag that paints 40
+  cells is ONE `builder.tile-painted` carrying every changed cell; a drag-move is ONE
+  `builder.entity-moved` from gesture start to end.
+- **Cancelled gestures emit nothing.** Esc mid-drag means no event — a step can never complete on
+  something the student aborted.
+- **Undo emits its own event** (`builder.command-undone`), never a replay of the original. If your
+  step cares about the *result*, use a world-state predicate — it reads the truth after any amount
+  of undoing.
+- **Payloads carry world facts, not UI facts** — cell coordinates, entity ids, markers; never
+  panel names or pointer positions.
+
+## Effects and overlays
+
+`onEnter` effects are declarative — the lesson *describes* the setup, the editor applies it:
+
+- `set-view-projection` switches the view lens (the "X-ray view" of the architecture's curated-lens
+  model; the world's own primary projection is untouched, and `null` returns to it). This is how
+  the perspective-reveal lesson walks a student through profile, top-down, and iso on one fixture
+  world.
+- `show-overlays` hands the lens layer a set of overlay specs: highlighted cells, labeled arrows,
+  and the right-triangle distance picture whose legs and hypotenuse label themselves with the
+  measured numbers — `3, 4, …5` appears by itself. Overlay endpoints can be `{ marker }`
+  references, resolved against the live document every frame, so the triangle between player and
+  crate follows the crate as the student drags it. That following *is* the lesson.
+
+## The authoring loop
+
+```bash
+pnpm dev:editor
+```
+
+Keep the editor open, edit a lesson file, save — the rail updates in place, no rebuild, no page
+refresh. The engine re-derives the current step against the live world on every reload: world-state
+steps that are already true stay completed; progress on *event* steps is forgotten, because an
+event is a moment, not a world fact. Reordering steps mid-session is safe.
+
+A lesson must pass `validateLessons` before it ships — ids unique and kebab-case, instructions
+non-empty, every step hinted, every event type resolvable through the frozen vocabulary. The
+validator's findings are author-facing, run as a content test in CI, and a failing lesson is a
+failing build.
+
+## The replay-corpus duty
+
+Shipping a lesson creates a permanent obligation: a script in the **lesson-replay corpus**
+(`content/lessons/test/replay-corpus.test.ts`), run on every PR, forever. A corpus entry is a
+*synthetic student*: a script of mutate-then-announce beats — first change the document the way the
+editor's command would (paint the cell, spawn the crate at its center), then feed the `builder.*`
+event the editor would emit afterwards. The script is driven through the **real tutorial engine**
+(`replayLesson`) against an inline starter-facts document that mirrors the pinned starter-world
+contract; no fixture worlds are staged — the corpus host answers `loadFixture` with false for every
+id, and fixture lessons must complete anyway, which they do because they gate every step on events.
+The gate demands every lesson complete with every step reached, so it is the mechanical answer to
+"did this refactor break a lesson some classroom is in the middle of?" — and it only works because
+predicates are confined to world facts and frozen events. The authoring duty is the script: a
+lesson is not done until its synthetic student finishes it. A stuck student is a P1 bug, and the
+corpus is how we find out before the student does.

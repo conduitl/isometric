@@ -41,12 +41,14 @@
 
 import type { Entity, EntityId, TileLayer, Tileset, World } from '@engine/core'
 import { entityIds, getEntity } from '@engine/core'
+import { drawLensOverlays } from '@engine/lens'
 import { Vec2 } from '@engine/math'
 import { DEPTH_BAND_STRIDE, paintersOrder } from '@engine/projection'
 import type { Projection, TransformStack, WorldPoint } from '@engine/projection'
 import type { RendererBackend } from '@engine/renderer'
 import { createLayerRenderer, PROFILE_SLAB_HEIGHT } from '@engine/tilemap'
 import type { LayerRenderer, RasterFactory } from '@engine/tilemap'
+import type { LensOverlaySpec } from '@engine/tutorial'
 import { entityWorldPoint, markerKind } from './picking'
 import type { PickedTile, Selection } from './types'
 
@@ -99,6 +101,9 @@ export interface RenderUi {
   readonly entityOverride: { readonly id: EntityId; readonly point: WorldPoint } | null
   readonly activeLayerId: string | null
   readonly grid: boolean
+  /** The tutorial's lens overlays (@engine/lens draws them; the session
+   * stores the set the lesson last declared). Empty = no lesson ink. */
+  readonly overlays: ReadonlyArray<LensOverlaySpec>
 }
 
 /** A frame's drawing area in CSS pixels, plus the device-pixel ratio. */
@@ -387,6 +392,17 @@ export function createSceneRenderer(opts: { raster: RasterFactory }): SceneRende
 
       // The grid rides on top of the world, under the pick overlays.
       if (ui.grid && activeLayer !== undefined) drawGrid(backend, doc, stack, activeLayer)
+
+      // The lesson's lens overlays: above the world and its grid (the math
+      // picture must be readable over terrain), but BELOW the hover ghost,
+      // cursor, and selection — the lesson's picture must never hide the
+      // very cell or entity the student is about to click. @engine/lens
+      // draws through the same backend and stack as everything else
+      // (public APIs only — its own rule #1). The entityOverride rides
+      // along so marker-resolved lesson ink follows the drag ghost: the
+      // right-triangle's numbers must move WITH the crate the student is
+      // dragging, not sit frozen on the committed position until drop.
+      if (ui.overlays.length > 0) drawLensOverlays(backend, stack, doc, ui.overlays, ui.entityOverride)
 
       // Overlays, dimmest first: hover ghost, then the keyboard cursor, then
       // the selection — so a selection is never hidden by the cursor merely

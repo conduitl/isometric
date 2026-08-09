@@ -1,0 +1,28 @@
+{
+  "name": "@engine/tutorial",
+  "version": "0.1.0",
+  "description": "The lesson-as-data engine: the FROZEN builder.* event vocabulary (D4), the lesson schema, world-state + event predicates (no UI-state predicates, by construction), the resumable step machine, and the replay harness that keeps shipped lessons working forever.",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engine/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

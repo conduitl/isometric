@@ -9,7 +9,11 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@engine/tutorial": "workspace:*"
+  },
   "devDependencies": {
+    "@engine/core": "workspace:*",
     "typescript": "catalog:"
   }
 }

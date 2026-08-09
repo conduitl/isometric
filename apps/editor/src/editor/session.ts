@@ -42,6 +42,7 @@ import type { RendererBackend } from '@engine/renderer'
 import { createCanvas2dBackend } from '@engine/renderer-canvas2d'
 import { createOffscreenRasterFactory, tileToWorld } from '@engine/tilemap'
 import type { RasterFactory } from '@engine/tilemap'
+import type { LensOverlaySpec, ViewProjectionName } from '@engine/tutorial'
 import { createLocalStorageSlots } from '@engine/world-format'
 import type { SlotStorage } from '@engine/world-format'
 import { anchor } from './anchors'
@@ -123,6 +124,10 @@ export function describeEvent(event: BuilderEvent, doc: World): string | null {
       return 'loaded world'
     case 'builder.world-renamed':
       return `renamed world to '${event.to}'`
+    case 'builder.view-projection-changed':
+      // Emitted by setViewProjection on real lens switches (Phase 3): the
+      // student hears which matrix they are now looking through.
+      return `switched to ${event.to} view`
   }
 }
 
@@ -144,6 +149,33 @@ const DOCUMENT_CHANGING_EVENTS: ReadonlySet<BuilderEvent['type']> = new Set([
 /** Restore-backup's status-bar sentence, shared by restoreBackup() and the
  * 'restore' origin of loadWorld. */
 const RESTORED_MESSAGE = 'Restored the backup copy — this is your previous save.'
+
+/** The status-bar sentence right after a park-restore (origin 'park-restore',
+ * types.ts): the restored document's bytes exist in NO save slot — the park
+ * key was spent bringing them back, and the save slot still holds whatever
+ * was last saved. Calling this 'saved' would open a silent data-loss window
+ * (a student who closes the tab here loses their world believing it kept);
+ * 'unsaved' plus this sentence tells the one action that closes it. */
+const PARK_RESTORED_MESSAGE = 'back from the lesson — press Ctrl+S to keep your world'
+
+/** The status-bar sentence while a lesson fixture is the live document —
+ * the short badge form of the parked-world story, kept up for as long as
+ * the fixture is live (edits to the fixture included). */
+const FIXTURE_MESSAGE = 'lesson world — your own world is parked and safe'
+
+/** save()'s refusal while a fixture is live (types.ts pins this): the full
+ * student-language sentence, returned AND shown, so a kid pressing Ctrl+S
+ * on the showcase island learns their world is fine — not that they just
+ * overwrote it with lesson scenery. */
+const FIXTURE_SAVE_REFUSED_MESSAGE =
+  'This is a lesson world you are visiting — your own world is parked and safe. ' +
+  'Head back to it before saving.'
+
+/** Every door a document can arrive through (types.ts pins the public
+ * union): the five persistent origins the frozen event vocabulary knows,
+ * plus the two app-side ones — 'fixture' (a borrowed lesson backdrop) and
+ * 'park-restore' (the parked world coming back after one). */
+type LoadOrigin = 'boot' | 'load' | 'import' | 'restore' | 'new' | 'fixture' | 'park-restore'
 
 // ---------------------------------------------------------------------------
 // The factory
@@ -186,12 +218,26 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
   /** Palette slot 1 — grass in the starter tileset, the obvious brush. */
   let activeTile = 1
   let activeMarker: string = MARKER_KINDS[0] ?? 'player'
+  /** The VIEW lens (ARCHITECTURE §4's curated X-ray): null = the document's
+   * own primary projection; a name = the re-projection the student (or a
+   * lesson effect) switched to. Never serialized — a lens is an opinion
+   * about looking, not a fact about the world. */
+  let viewProjection: ViewProjectionName | null = null
+  /** The tutorial's overlay set, drawn by @engine/lens each frame. Render-
+   * only transient state, exactly like hover: no snapshot, no history. */
+  let overlays: ReadonlyArray<LensOverlaySpec> = []
   let lastAction: string | null = null
   /** Bumped with EVERY lastAction change (types.ts): two identical labels
    * in a row still differ here, so the announcer can force a DOM mutation
    * and screen readers re-announce "painted 1 tile" the second time too. */
   let lastActionSeq = 0
   let persistence: PersistenceState = { state: 'unsaved', message: null }
+  /** True while the live document is a lesson fixture (origin 'fixture') —
+   * a borrowed backdrop the tutorial host swapped in. While it is raised,
+   * save() refuses (writing the fixture into the student's save slot would
+   * destroy their world); it clears the moment ANY other origin arrives
+   * (types.ts pins both halves). */
+  let fixtureActive = false
   /** The last pointer-derived readout, kept so camera changes can republish
    * a fresh zoom without inventing a pointer position. */
   let lastPointer: {
@@ -246,11 +292,35 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
     }
   }
 
-  /** (Re)build the stack and its camera controller from the current doc —
-   * loadWorld's move, since a new world may carry a new projection. */
-  function rebuildStack(): void {
-    stack = createTransformStack(projectionFor(doc.settings.primaryProjection))
+  /** The projection the picture currently lives in: the VIEW lens when one
+   * is set, else the document's own primary. Everything downstream —
+   * picking, tools, the cursor, overlays — reads the stack this name built,
+   * which is why they all keep working through a lens switch: the math
+   * never needed the art (ARCHITECTURE §4). */
+  const effectiveProjection = (): ViewProjectionName => viewProjection ?? doc.settings.primaryProjection
+
+  /** (Re)build the stack and its camera controller around a projection —
+   * loadWorld's move (a new world may carry a new primary) and
+   * setViewProjection's (same world, different matrix). */
+  function rebuildStack(name: ViewProjectionName): void {
+    stack = createTransformStack(projectionFor(name))
     cameraController = createCameraController(stack, viewSize)
+  }
+
+  /** Frame the whole world in the fresh stack — or defer until the canvas
+   * has real space (attach/onResize land the pending fit). Republishes the
+   * fast readout either way: the zoom the status bar shows must belong to
+   * the camera that now exists, not its predecessor. */
+  function refitCamera(): void {
+    needsFit = true
+    if (viewport !== null) {
+      const size = viewport.size()
+      if (size.width > 0 && size.height > 0) {
+        cameraController.fit(doc)
+        needsFit = false
+      }
+    }
+    publishFast()
   }
 
   /** Keep the brush value inside the current palette after the palette
@@ -268,9 +338,10 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
   /**
    * Rebuild the full EditorSnapshot from the document plus the session's ui
    * state, through Wave A's pure builders. One deliberate omission: the
-   * `lesson` slice is NOT written — zustand's setState merges shallowly, so
-   * leaving the key out preserves whatever the lesson harness (which owns
-   * that slice and writes it via its own setState) last published.
+   * `tutorial` slice is NOT written — zustand's setState merges shallowly,
+   * so leaving the key out preserves whatever the tutorial engine (which
+   * owns that slice and publishes it through the host's own setState) last
+   * published.
    */
   function refreshSnapshot(): void {
     store.setState({
@@ -289,6 +360,8 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
       lastAction,
       lastActionSeq,
       persistence,
+      viewProjection,
+      primaryProjection: doc.settings.primaryProjection,
     })
   }
 
@@ -327,7 +400,10 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
       lastActionSeq += 1
     }
     if (DOCUMENT_CHANGING_EVENTS.has(event.type)) {
-      persistence = { state: 'unsaved', message: null }
+      // While a fixture is live, edits to it are still honestly 'unsaved' —
+      // but the message stays up: the story the status bar must keep telling
+      // is "your own world is parked and safe", not silence.
+      persistence = { state: 'unsaved', message: fixtureActive ? FIXTURE_MESSAGE : null }
     }
     refreshSnapshot()
     requestRender()
@@ -346,7 +422,7 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
    */
   function loadWorldInternal(
     world: World,
-    origin: 'boot' | 'load' | 'import' | 'restore' | 'new',
+    origin: LoadOrigin,
     usedBackup: boolean,
     nextPersistence: PersistenceState,
   ): void {
@@ -359,36 +435,51 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
     preview.clear()
 
     doc = world
+    // Origin 'fixture' RAISES the borrowed-backdrop flag; every other origin
+    // clears it — the one-line rule that makes "save refuses while a fixture
+    // is live" impossible to leave stuck on (types.ts: fixtureActive).
+    fixtureActive = origin === 'fixture'
     bus.clearHistory()
     selection = null
     hoverTile = null
     cursor = null
     lastPointer = { world: null, tile: null }
 
+    // A new document arrives in its OWN primary lens: the view lens was an
+    // opinion about looking at the OLD world, and carrying it across would
+    // show the new world through a borrowed matrix nobody chose for it —
+    // a student loading their top-down map mid-iso-lesson should meet their
+    // map, not a leftover X-ray of it.
+    viewProjection = null
+
     // New layer objects (and possibly a new projection): the renderer cache
     // keyed by layer identity would silently go stale without this.
     sceneRenderer.reset()
-    rebuildStack()
+    rebuildStack(doc.settings.primaryProjection)
 
-    needsFit = true
-    if (viewport !== null) {
-      const size = viewport.size()
-      if (size.width > 0 && size.height > 0) {
-        cameraController.fit(doc)
-        needsFit = false
-      }
-    }
-    // The status bar's zoom readout must not keep showing the OLD world's
-    // camera: republish with the fresh zoom. Coordinates are null honestly —
-    // lastPointer died with the old world a few lines up. (When the fit is
-    // deferred, the attach/onResize path that lands it republishes again.)
-    publishFast()
+    // Frame the new world (or defer to attach/onResize) and republish the
+    // readout: the zoom must be the fresh camera's, and coordinates are
+    // null honestly — lastPointer died with the old world a few lines up.
+    refitCamera()
 
     activeLayerId = doc.layers[0]?.id ?? null
     clampActiveTile()
     persistence = nextPersistence
 
-    emitter.emit({ type: 'builder.world-loaded', worldId: doc.meta.worldId, origin, usedBackup })
+    emitter.emit({
+      type: 'builder.world-loaded',
+      worldId: doc.meta.worldId,
+      // The frozen event vocabulary (D4) predates the app-side 'fixture'
+      // and 'park-restore' origins, and frozen payloads do not widen for
+      // app conveniences: to a decade of lesson data a fixture arrival IS
+      // a fresh unsaved stage, so the event says 'new' — and a park-restore
+      // IS a load (a whole stored world arriving on stage), so the event
+      // says 'load'. Both distinctions live app-side (fixtureActive +
+      // save()'s refusal; the park-restore persistence badge), where they
+      // are enforced.
+      origin: origin === 'fixture' ? 'new' : origin === 'park-restore' ? 'load' : origin,
+      usedBackup,
+    })
     refreshSnapshot()
     requestRender()
   }
@@ -397,7 +488,7 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
    * is listed as 'saved' because the only boot that reaches the PUBLIC
    * loadWorld is a from-storage boot; the factory's starter fallback passes
    * its own 'unsaved' through the internal path directly. */
-  function persistenceFor(origin: 'boot' | 'load' | 'import' | 'restore' | 'new'): PersistenceState {
+  function persistenceFor(origin: LoadOrigin): PersistenceState {
     switch (origin) {
       case 'boot':
       case 'load':
@@ -408,6 +499,17 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
       case 'new':
         // An imported (or brand-new) world has not been saved HERE yet.
         return { state: 'unsaved', message: null }
+      case 'fixture':
+        // A borrowed lesson backdrop: 'unsaved' is the honest badge (this
+        // document is not in the save slot), and the message tells the
+        // story that matters — the student's own world is parked, not lost.
+        return { state: 'unsaved', message: FIXTURE_MESSAGE }
+      case 'park-restore':
+        // The parked world coming back after a lesson detour: its bytes may
+        // exist in NO save slot (the park key was just spent), so 'saved'
+        // would be a lie with a data-loss window behind it. 'unsaved', and
+        // the message names the one action that closes the window.
+        return { state: 'unsaved', message: PARK_RESTORED_MESSAGE }
     }
   }
 
@@ -538,6 +640,7 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
           cursorTile: cursor,
           entityOverride: preview.entityOverride,
           activeLayerId,
+          overlays,
           // The grid stays ON this phase: the v1 editor always shows it —
           // cells are the editing vocabulary, and hiding them is a later
           // preference, not a Phase 2 option.
@@ -592,6 +695,17 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
   // --- persistence ----------------------------------------------------------
 
   function save(): SaveOutcome {
+    // The fixture refusal comes BEFORE everything — the gesture settle
+    // included: refusing must have zero side effects on the document
+    // (types.ts pins this), and settling would commit a live stroke into a
+    // borrowed backdrop nobody keeps. Storage is never touched; only the
+    // persistence mirror changes, so the status bar can say why.
+    if (fixtureActive) {
+      persistence = { state: 'unsaved', message: FIXTURE_SAVE_REFUSED_MESSAGE }
+      refreshSnapshot()
+      return { ok: false, message: FIXTURE_SAVE_REFUSED_MESSAGE }
+    }
+
     // Settle the active tool's live gesture FIRST — commit it (onSettle),
     // so a half-painted stroke or mid-air drag enters the file as a normal
     // history entry with its event, never as silent bytes. A tool without
@@ -766,8 +880,66 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
     },
     importText,
 
-    loadWorld(world: World, origin: 'boot' | 'load' | 'import' | 'restore' | 'new'): void {
+    loadWorld(world: World, origin: LoadOrigin): void {
       loadWorldInternal(world, origin, false, persistenceFor(origin))
+    },
+
+    get fixtureActive(): boolean {
+      return fixtureActive
+    },
+
+    announce(label: string): void {
+      // The tutorial host's door into the editor's ONE voice (types.ts):
+      // the same lastAction/lastActionSeq the builder-event listener
+      // writes, so the status bar's single live region speaks rail changes
+      // too — and deliberately NO builder event, because nothing happened
+      // to the world (a step advancing is the rail's news, not the
+      // document's, and lessons must never gate on their own narration).
+      lastAction = label
+      lastActionSeq += 1
+      refreshSnapshot()
+    },
+
+    setViewProjection(name: ViewProjectionName | null): void {
+      if (name === viewProjection) return // same lens: nothing to do, nothing to say
+      const from = effectiveProjection()
+      viewProjection = name
+      const to = effectiveProjection()
+      if (from !== to) {
+        // Mirror setActiveLayer: the live gesture dies with the matrix
+        // switch, cancelled, never committed — a stroke or drag opened
+        // under the old projection would otherwise keep recording through
+        // a stack that no longer exists (its cells and ghost mapped by a
+        // dead matrix). The preview sweep catches overrides the ACTIVE
+        // tool does not own, exactly as loadWorld does.
+        tools.get(activeToolId)?.onCancel()
+        preview.clear()
+        // Same world, different matrix: the layer raster cache is a picture
+        // OF a projection (each LayerRenderer baked its geometry at creation),
+        // so it must be dropped before the stack rebuilds around the new
+        // effective projection and the camera refits the world into it.
+        sceneRenderer.reset()
+        rebuildStack(to)
+        refitCamera()
+        // The EFFECTIVE names, only on real changes: asking for the primary
+        // by its own name (or clearing an already-null lens) changes no
+        // matrix and therefore says nothing — lessons gate on this event,
+        // and a no-op switch is not a switch.
+        emitter.emit({ type: 'builder.view-projection-changed', from, to })
+      }
+      refreshSnapshot()
+      requestRender()
+    },
+
+    get viewProjection(): ViewProjectionName | null {
+      return viewProjection
+    },
+
+    setOverlays(next: ReadonlyArray<LensOverlaySpec>): void {
+      // Render-only, like hover: the lesson's picture changes on screen this
+      // frame and touches nothing else — no snapshot, no history, no event.
+      overlays = next
+      requestRender()
     },
 
     onEvent(listener: (event: BuilderEvent) => void): () => void {

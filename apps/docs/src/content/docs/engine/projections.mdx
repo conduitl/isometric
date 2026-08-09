@@ -1,0 +1,104 @@
+---
+title: 'Projections: one world, three matrices'
+description: The Projection-as-data model — profile, top-down, and iso are the same formula with different numbers in it.
+---
+
+import ProjectionDemo from '../../../components/ProjectionDemo.astro'
+
+Every game that draws a 3-ish-D world on a flat screen answers one question: *where does the world
+point (x, y, z) land?* Most engines bury the answer inside a render function. Here the answer is an
+object you can open. A `Projection` carries its ground matrix `A` and its elevation vector `e` as
+plain inspectable fields, and projecting is a one-line formula:
+
+```
+view = A·(x, y) + e·z
+```
+
+Read `A` the way `Mat3` teaches: **columns are landing spots**. The first column of `A` is where
+one step east shows up on screen, the second column is where one step north shows up, and `e` is
+where one step up shows up. Know those three landing spots and you know the entire projection —
+every other point follows linearly.
+
+## Try it
+
+The world below is fixed: an 8×6 grid, one highlighted cell, a marker floating 1.25 units above it.
+Only the matrix changes.
+
+<ProjectionDemo />
+
+Things worth watching for:
+
+- **Top-down** shows the honest y-flip: north lands at `(0, −1)` because world y grows northward
+  but screen y grows downward. One `−1` in the matrix converts between them. And `up → (0, 0)` —
+  a bird straight overhead cannot see height, so the marker's elevation post has zero length.
+- **Iso 2:1** sends east to `(1, 0.5)` (down-right, toward the viewer) and north to `(1, −0.5)`
+  (up-right, away). The square cell becomes a diamond because that is literally what the matrix
+  does to it, corner by corner.
+- **Profile** collapses the whole grid onto a line. Its second column is `(0, 0)` — one step north
+  lands *nowhere*. `A` is rank-deficient, its determinant is zero, and no inverse matrix exists.
+  That is not a bug to hide; it is the honest lesson of the side view: an edge-on camera cannot see
+  depth into the screen. Every side-scroller ever made quietly lives with this.
+
+The readout under the canvas is not hand-written — it prints the live `Projection` object's own
+`ground` and `elevation` fields. And the demo itself imports the real workspace packages
+(`@engine/math`, `@engine/projection`, `@engine/renderer-canvas2d`): the same `createIso()` a
+student reads in `packages/projection/src/projections.ts` drew the diamonds above. If that code
+breaks, this page stops building.
+
+## The three built-ins
+
+The table from `docs/ARCHITECTURE.md` §4 — the actual numbers, not a simplification:
+
+| Projection | Ground matrix A | Elevation e | What it teaches |
+|---|---|---|---|
+| Profile | `[[s, 0], [0, 0]]` (rank-deficient: y collapses to lanes) | `(0, −s)` | Functions as terrain (`y = f(x)`), slope, parabolas, gravity |
+| Top-down | `s·[[1, 0], [0, −1]]` (the y-flip, taught) | `(0, 0)` (shadow/scale optional) | Cartesian coordinates, distance-as-Pythagoras, vectors, angles |
+| Iso 2:1 dimetric | east → `(tileW/2, tileH/2)`, north → `(tileW/2, −tileH/2)` — i.e. `screen = ((x+y)·tileW/2, (x−y)·tileH/2)`, with `tileW = 2·tileH` | `(0, −zScale)` | Linear maps, basis vectors, 2×2 inversion, why exact halves beat true 30° isometric |
+
+Each projection appears in the curriculum where its math lives: profile is the functions-and-slope
+classroom, top-down is the coordinates-and-Pythagoras classroom, and iso is the linear-algebra
+classroom — basis vectors visible as "where one world-step east lands on screen".
+
+## Why the iso camera looks from the south-east
+
+This is decision D7 in the register, and it was caught by adversarial review while zero world files
+existed — the last moment it could be changed.
+
+The classic games formula for isometric projection is `(x−y, x+y)`. It assumes screen-style
+coordinates where y grows *southward*. Our world is y-north (`x` = east, `y` = north, `z` = up —
+math-class axes, on purpose), and feeding a y-north world through the y-south formula silently
+**mirrors every map**.
+
+The tell is the determinant. Top-down's matrix has determinant `−s²` — negative, meaning the map
+reverses winding exactly once: the single honest flip that turns a y-up world into a y-down screen.
+Our iso orientation, east → `(w/2, h/2)` and north → `(w/2, −h/2)`, has determinant `−w·h/2` —
+*also negative*. Same sign, same winding: a square walked east-then-north keeps the same
+orientation in both views, and a kid's map reads identically in the product's two main windows.
+The mirrored iso would have determinant `+w·h/2` and silently flip every map relative to top-down.
+
+Geometrically, this is the camera hovering to the **south-east**: east runs down-right toward the
+viewer, north runs up-right away — the natural companion to profile's camera looking in from the
+south. Once world files and tutorial predicates exist, this choice is permanent; that is why it is
+a one-way door in `docs/DECISIONS.md`.
+
+## Picking is the inverse, with an honest twist
+
+`project` eats three numbers `(x, y, z)` and returns two. Information is destroyed on the way, so
+no formula can climb back up alone: **two numbers in, three numbers out needs one number back.**
+That is why the inverse takes a constraint:
+
+```ts
+inverse(viewPoint, { kind: 'ground' })            // assume z = 0 — the click hit the floor
+inverse(viewPoint, { kind: 'elevation', z: 2 })   // assume this height — a dragged entity's storey
+inverse(viewPoint, { kind: 'lane', y: 4 })        // assume this lane — profile's missing number
+```
+
+With one world quantity pinned, the other two fall out of linear algebra a student can do by hand
+— for iso it is a 2×2 inversion by elimination, derived line by line in the doc comment of
+`createIso`. Each projection accepts only the constraints that are geometrically meaningful for it
+and returns `null` for the rest — not an error, a fact about the geometry. The same idea, one
+dimension up, is why 3D engines pick with rays: a 2D click into a 3D world is short a number there
+too.
+
+Every pointer event in the editor converts screen→world through exactly this inverse. The editor
+dogfoods the curriculum on every click.

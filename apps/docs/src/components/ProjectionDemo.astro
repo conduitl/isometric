@@ -1,0 +1,258 @@
+---
+/**
+ * The live projection demo — and the proof that these docs run on the real
+ * engine. The script below imports @engine/math, @engine/projection, and
+ * @engine/renderer-canvas2d straight from their workspace sources (aliased in
+ * astro.config.mjs, exactly the way apps/editor resolves them). No copy of the
+ * math lives in this file: the diamonds you see are drawn by the same
+ * createIso() students read, through the same Canvas2D backend the editor uses.
+ * If the engine breaks, this page stops building — which is the point.
+ *
+ * Deliberately not an animation: one draw per interaction (load + button
+ * click), because the lesson is "same world, different matrix", not motion.
+ */
+---
+
+<figure class="projection-demo">
+  <div class="projection-demo-controls" role="group" aria-label="Choose a projection">
+    <button type="button" data-projection="topdown" aria-pressed="true">top-down</button>
+    <button type="button" data-projection="iso" aria-pressed="false">iso 2:1</button>
+    <button type="button" data-projection="profile" aria-pressed="false">profile</button>
+  </div>
+  <canvas
+    width="640"
+    height="360"
+    data-demo-canvas
+    role="img"
+    aria-label="A fixed 8 by 6 world grid, one highlighted cell, and a floating marker, drawn through the selected projection. The readout below the picture gives the projection's matrix columns as numbers."
+  ></canvas>
+  <figcaption>
+    <!-- Filled from the LIVE Projection object's own fields — A's columns and
+         e are data on the object, not documentation of it. -->
+    <code data-demo-readout aria-live="polite"></code>
+  </figcaption>
+</figure>
+
+<style>
+  .projection-demo {
+    margin: 1.5rem 0;
+  }
+  .projection-demo canvas {
+    display: block;
+    width: 100%;
+    max-width: 640px;
+    aspect-ratio: 16 / 9;
+    height: auto;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+  }
+  .projection-demo-controls {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .projection-demo-controls button {
+    font: inherit;
+    font-size: var(--sl-text-sm);
+    padding: 0.35rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid var(--sl-color-gray-4);
+    background: var(--sl-color-bg);
+    color: var(--sl-color-text);
+    cursor: pointer;
+  }
+  .projection-demo-controls button[aria-pressed='true'] {
+    background: var(--sl-color-text-accent);
+    border-color: var(--sl-color-text-accent);
+    color: var(--sl-color-black);
+  }
+  .projection-demo figcaption {
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-2);
+  }
+</style>
+
+<script>
+  // The real packages. These specifiers resolve to ../../packages/*/src via
+  // the aliases in astro.config.mjs — the docs build compiles the actual
+  // engine sources into this page.
+  import { Vec2 } from '@engine/math'
+  import {
+    createIso,
+    createProfile,
+    createTopDown,
+    createTransformStack,
+    fitCamera,
+  } from '@engine/projection'
+  import type { Projection, ProjectionName, WorldPoint } from '@engine/projection'
+  import { createCanvas2dBackend } from '@engine/renderer-canvas2d'
+  import type { RendererBackend } from '@engine/renderer'
+
+  // The fixture: an 8×6 ground grid, one highlighted cell, and a marker
+  // floating 1.25 units above that cell's center. Small on purpose — every
+  // line the demo draws should be attributable to one projected world point.
+  const GRID_W = 8
+  const GRID_H = 6
+  const CELL = { tx: 3, ty: 2 }
+  const MARKER: WorldPoint = { x: 3.5, y: 2.5, z: 1.25 }
+  const VIEW_W = 640
+  const VIEW_H = 360
+
+  // One palette, painted onto our own background so it reads identically in
+  // the site's light and dark themes.
+  const COLOR = {
+    background: '#141a26',
+    grid: 'rgba(148, 163, 184, 0.4)',
+    cellFill: 'rgba(56, 189, 248, 0.22)',
+    cellStroke: '#38bdf8',
+    east: '#fb7185',
+    north: '#4ade80',
+    up: '#c084fc',
+    post: 'rgba(245, 158, 11, 0.6)',
+    marker: '#f59e0b',
+    text: '#e2e8f0',
+  }
+
+  const PROJECTIONS: Record<ProjectionName, () => Projection> = {
+    topdown: () => createTopDown({ scale: 1 }),
+    iso: () => createIso({ tileWidth: 2, tileHeight: 1, zScale: 1 }),
+    profile: () => createProfile({ scale: 1 }),
+  }
+
+  /** Round for the readout; normalize −0 so "up → (0, 0)" never reads "(-0, 0)". */
+  const fmt = (n: number): string => {
+    const rounded = Math.round(n * 100) / 100
+    return (Object.is(rounded, -0) ? 0 : rounded).toString()
+  }
+
+  /** A stroked arrow with a two-segment head, plus a label past the tip.
+   * Skipped when the projected axis collapsed to (almost) nothing — that
+   * VANISHING is each view's honest lesson, and a zero-length arrow would
+   * only smudge it. The readout still shows the zeros. */
+  function drawArrow(
+    backend: RendererBackend,
+    from: Vec2,
+    to: Vec2,
+    color: string,
+    label: string,
+  ): void {
+    const dir = Vec2.sub(to, from)
+    if (Vec2.length(dir) < 3) return
+    const unit = Vec2.normalize(dir)
+    const side = Vec2.perp(unit)
+    const base = Vec2.sub(to, Vec2.scale(unit, 8))
+    backend.drawPolyline({ points: [from, to], stroke: color, lineWidth: 2 })
+    backend.drawPolyline({
+      points: [Vec2.add(base, Vec2.scale(side, 4)), to, Vec2.sub(base, Vec2.scale(side, 4))],
+      stroke: color,
+      lineWidth: 2,
+    })
+    const at = Vec2.add(to, Vec2.scale(unit, 14))
+    backend.drawText({ x: at.x, y: at.y, text: label, fill: color, align: 'center', baseline: 'middle' })
+  }
+
+  function draw(backend: RendererBackend, readout: HTMLElement, projection: Projection): void {
+    // Frame the whole fixture (including the marker's elevation) with the
+    // engine's own fitCamera, then walk every point through the same
+    // TransformStack the editor uses: screen = camera ∘ projection.
+    const camera = fitCamera({
+      viewWidth: VIEW_W,
+      viewHeight: VIEW_H,
+      worldMin: Vec2.make(0, 0),
+      worldMax: Vec2.make(GRID_W, GRID_H),
+      zRange: [0, MARKER.z],
+      projection,
+      padding: 36,
+    })
+    const stack = createTransformStack(projection, camera)
+    const s = (x: number, y: number, z = 0): Vec2 => stack.worldToScreen({ x, y, z })
+
+    backend.beginFrame({
+      width: VIEW_W,
+      height: VIEW_H,
+      dpr: window.devicePixelRatio || 1,
+      background: COLOR.background,
+    })
+
+    // The ground grid: straight world lines in, whatever A says out.
+    // (In profile every one of these collapses onto a single line — watch.)
+    for (let gx = 0; gx <= GRID_W; gx++) {
+      backend.drawPolyline({ points: [s(gx, 0), s(gx, GRID_H)], stroke: COLOR.grid, lineWidth: 1 })
+    }
+    for (let gy = 0; gy <= GRID_H; gy++) {
+      backend.drawPolyline({ points: [s(0, gy), s(GRID_W, gy)], stroke: COLOR.grid, lineWidth: 1 })
+    }
+
+    // One ground cell, corner by corner: a square top-down, a diamond in iso,
+    // a line segment edge-on in profile.
+    backend.drawPolyline({
+      points: [
+        s(CELL.tx, CELL.ty),
+        s(CELL.tx + 1, CELL.ty),
+        s(CELL.tx + 1, CELL.ty + 1),
+        s(CELL.tx, CELL.ty + 1),
+      ],
+      closed: true,
+      fill: COLOR.cellFill,
+      stroke: COLOR.cellStroke,
+      lineWidth: 1.5,
+    })
+
+    // The three landing spots: A's first column (east), A's second column
+    // (north), and e (up) — drawn as arrows from the world origin.
+    drawArrow(backend, s(0, 0), s(1, 0), COLOR.east, 'east')
+    drawArrow(backend, s(0, 0), s(0, 1), COLOR.north, 'north')
+    drawArrow(backend, s(0, 0), s(0, 0, 1), COLOR.up, 'up')
+
+    // The marker and its elevation post: the post IS e·z, drawn from the
+    // ground point to the lifted point. Top-down has e = (0, 0), so the post
+    // has zero length there — a bird overhead cannot see height.
+    backend.drawPolyline({
+      points: [s(MARKER.x, MARKER.y, 0), s(MARKER.x, MARKER.y, MARKER.z)],
+      stroke: COLOR.post,
+      lineWidth: 2,
+    })
+    const m = s(MARKER.x, MARKER.y, MARKER.z)
+    backend.drawCircle({ x: m.x, y: m.y, radius: 6, fill: COLOR.marker, stroke: COLOR.background, lineWidth: 2 })
+    backend.drawText({
+      x: m.x + 11,
+      y: m.y - 9,
+      text: `(${MARKER.x}, ${MARKER.y}, ${MARKER.z})`,
+      fill: COLOR.text,
+    })
+
+    backend.endFrame()
+
+    // Read the projection's own data fields back out. Mat3 columns are the
+    // landing spots: east = (a, b), north = (c, d); e is the elevation vector.
+    const g = projection.ground
+    const e = projection.elevation
+    readout.textContent =
+      `${projection.name}:  east → (${fmt(g.a)}, ${fmt(g.b)})   ` +
+      `north → (${fmt(g.c)}, ${fmt(g.d)})   up → (${fmt(e.x)}, ${fmt(e.y)})`
+  }
+
+  // Wire every instance on the page (there is one, but the code shouldn't
+  // care). Draw on load, redraw on each button press — no rAF loop; a still
+  // picture per matrix is the lesson.
+  for (const root of document.querySelectorAll<HTMLElement>('.projection-demo')) {
+    const canvas = root.querySelector<HTMLCanvasElement>('[data-demo-canvas]')
+    const readout = root.querySelector<HTMLElement>('[data-demo-readout]')
+    if (canvas === null || readout === null) continue
+    const backend = createCanvas2dBackend(canvas)
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('button[data-projection]')]
+
+    const select = (name: ProjectionName): void => {
+      for (const b of buttons) {
+        b.setAttribute('aria-pressed', String(b.dataset.projection === name))
+      }
+      draw(backend, readout, PROJECTIONS[name]())
+    }
+
+    for (const b of buttons) {
+      b.addEventListener('click', () => select(b.dataset.projection as ProjectionName))
+    }
+    select('topdown')
+  }
+</script>

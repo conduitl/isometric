@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "pnpm -r run build",
+    "docs:build": "pnpm --filter docs build",
     "test": "vitest run --project unit",
     "test:visual": "vitest run --project browser",
     "test:all": "vitest run",

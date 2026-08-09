@@ -135,6 +135,9 @@ importers:
       '@engine/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@engine/lens':
+        specifier: workspace:*
+        version: link:../../packages/lens
       '@engine/math':
         specifier: workspace:*
         version: link:../../packages/math
@@ -150,6 +153,9 @@ importers:
       '@engine/tilemap':
         specifier: workspace:*
         version: link:../../packages/tilemap
+      '@engine/tutorial':
+        specifier: workspace:*
+        version: link:../../packages/tutorial
       '@engine/world-format':
         specifier: workspace:*
         version: link:../../packages/world-format
@@ -226,7 +232,14 @@ importers:
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.1)
 
   content/lessons:
+    dependencies:
+      '@engine/tutorial':
+        specifier: workspace:*
+        version: link:../../packages/tutorial
     devDependencies:
+      '@engine/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -236,6 +249,31 @@ importers:
       '@engine/math':
         specifier: workspace:*
         version: link:../math
+    devDependencies:
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/lens:
+    dependencies:
+      '@engine/core':
+        specifier: workspace:*
+        version: link:../core
+      '@engine/math':
+        specifier: workspace:*
+        version: link:../math
+      '@engine/projection':
+        specifier: workspace:*
+        version: link:../projection
+      '@engine/renderer':
+        specifier: workspace:*
+        version: link:../renderer
+      '@engine/tutorial':
+        specifier: workspace:*
+        version: link:../tutorial
     devDependencies:
       tsdown:
         specifier: 'catalog:'
@@ -318,6 +356,19 @@ importers:
       '@engine/renderer':
         specifier: workspace:*
         version: link:../renderer
+    devDependencies:
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/tutorial:
+    dependencies:
+      '@engine/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       tsdown:
         specifier: 'catalog:'

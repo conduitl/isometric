@@ -1,0 +1,32 @@
+{
+  "name": "@engine/lens",
+  "version": "0.1.0",
+  "description": "The overlay layer: world-space spotlights, labeled arrows, the right-triangle distance overlay, and the in-house DOM masked spotlight — built strictly on public APIs so any private shortcut breaks visible features immediately.",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engine/core": "workspace:*",
+    "@engine/math": "workspace:*",
+    "@engine/projection": "workspace:*",
+    "@engine/renderer": "workspace:*",
+    "@engine/tutorial": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

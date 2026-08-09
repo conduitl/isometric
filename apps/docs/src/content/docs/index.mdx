@@ -5,21 +5,50 @@ template: splash
 hero:
   tagline: A 2D web game engine that teaches math by refusing to hide it — the engine's own coordinates, vectors, and projection matrices are the curriculum.
   actions:
-    - text: What this is
-      link: /start/overview/
+    - text: Get started
+      link: /start/getting-started/
       icon: right-arrow
-    - text: Run the project
-      link: /start/running/
+    - text: See a projection matrix work
+      link: /engine/projections/
       variant: minimal
 ---
 
-## The idea
+## The glass box is the product
 
 Everything this engine teaches — the math library, the projection pipeline, the world model, the
 game loop — is small, owned, literate TypeScript readable by a motivated 15-year-old. Every value a
 student can see is a named, inspectable, invertible object; the update loop pauses and single-steps;
 *"how does clicking work?"* is literally answered by inverting a matrix.
 
-This site is a skeleton today. In Phase 3 it becomes the executable curriculum: live demos on these
-pages import the actual published `@engine/*` packages, so the docs build doubles as an integration
-test and the math package's pages **are** lesson content.
+Most engines hide their math because hiding it is good engineering. This one exposes its math
+because the math **is** the product — and that inversion shapes everything: no anonymous arithmetic
+inside render functions, no dependency where the curriculum lives, and doc comments that carry
+derivations, because the source code is assigned reading.
+
+## Where the project stands
+
+Phase 3. The stack underneath is real and tested:
+
+- **The world editor** (`editor`; `@app/editor` is the architecture docs' planned published
+  name) — paint tiles, place and move entities, save/load with
+  backup restore, full undo/redo, entirely from the keyboard if you choose.
+- **The tutorial engine** (`@engine/tutorial`) — lessons as data, gated on real in-canvas actions
+  (never "click Next"), with hint and reset escapes on every step, resumable across reloads.
+- **The lens layer** (`@engine/lens`) — world-space overlays (highlighted cells, labeled arrows,
+  the right-triangle that makes "distance" mean something) and the DOM spotlight lessons use to
+  point at editor chrome.
+- **The first arcs** — coordinates and distance-as-Pythagoras, plus the perspective-switch reveal:
+  the same world through three projection matrices.
+
+These pages are part of that stack, not commentary on it: the live demos here import the actual
+`@engine/*` workspace packages, so the docs build doubles as an integration test.
+
+## Run it
+
+```bash
+pnpm install
+pnpm dev:editor
+```
+
+That opens the world editor with the lesson rail attached. [Getting
+started](/start/getting-started/) has the full command list and what each test gate proves.

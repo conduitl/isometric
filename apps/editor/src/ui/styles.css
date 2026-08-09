@@ -320,6 +320,68 @@ button[aria-pressed='true'] .toolbar-key {
   color: var(--accent);
 }
 
+/* The arc label rides above the lesson title, quiet and small. */
+.lesson-arc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lesson-step-title {
+  margin: 4px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Revealed hints stack as a real list — each one keeps its bullet so the
+ * escalation ladder reads as a ladder. (Two classes deep to outrank the
+ * generic `.panel ul` reset above.) */
+.lesson-rail .lesson-hints {
+  list-style: disc;
+  margin: 6px 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lesson-rail .lesson-hints p {
+  margin: 0;
+}
+
+.lesson-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+/* The lesson picker: label beside a select, same family as the inputs. */
+.lesson-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+
+.lesson-picker span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.lesson-picker select {
+  font: inherit;
+  color: var(--text);
+  background: var(--well);
+  border: 1px solid var(--panel-edge);
+  border-radius: 4px;
+  padding: 3px 6px;
+  min-width: 0;
+  flex: 1;
+}
+
 /* -------------------------------------------------------------- status bar */
 
 .status-bar {

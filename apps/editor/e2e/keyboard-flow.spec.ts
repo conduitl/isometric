@@ -20,7 +20,8 @@
  * Assertion strings come from THE announcement table (describeEvent in
  * src/editor/session.ts) and the command labels
  * (src/editor/commands/entity-commands.ts), so a wording change there fails
- * here by design; announcer assertions go through expectAnnouncement below,
+ * here by design; announcer assertions go through expectAnnouncement (shared
+ * plumbing in ./helpers.ts, alongside tabTo and the anchor selectors),
  * which tolerates the StatusBar's zero-width re-announcement suffix.
  *
  * Keyboard chords use Control (not Meta) even on darwin hosts: the shell
@@ -30,93 +31,22 @@
  */
 
 import { expect, test } from '@playwright/test'
-import type { Page } from '@playwright/test'
 import { AxeBuilder } from '@axe-core/playwright'
-
-// ---------------------------------------------------------------------------
-// Anchor selectors — the same data-anchor ids lessons target (anchors.ts).
-// ---------------------------------------------------------------------------
-
-const CANVAS = '[data-anchor="viewport.canvas"]'
-const ANNOUNCEMENTS = '[data-anchor="status.announcements"]'
-const SAVE_STATE = '[data-anchor="status.saveState"]'
-const COORDS = '[data-anchor="status.coords"]'
-const WORLD_NAME = '[data-anchor="toolbar.worldName"]'
-const ENTITIES_PANEL = '[data-anchor="panel.entities"]'
-const INSPECTOR = '[data-anchor="panel.inspector"]'
-const LESSON = '[data-anchor="panel.lesson"]'
-const TILES_GROUP = '[data-anchor="palette.tiles"]'
-const THINGS_GROUP = '[data-anchor="palette.entities"]'
-
-/** Where focus should land: an anchored element, or a button (identified by
- * its exact trimmed text) inside a group given as a full CSS selector. */
-type FocusTarget = { anchor: string } | { within: string; text: string }
-
-/** Does document.activeElement match the target right now? */
-function focusMatches(page: Page, target: FocusTarget): Promise<boolean> {
-  return page.evaluate((t) => {
-    const el = document.activeElement
-    if (!(el instanceof HTMLElement)) return false
-    if ('anchor' in t) return el.dataset['anchor'] === t.anchor
-    const group = document.querySelector(t.within)
-    return group !== null && group.contains(el) && (el.textContent ?? '').trim() === t.text
-  }, target)
-}
-
-/** A short name for whatever holds focus — for the failure message only. */
-function describeFocus(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const el = document.activeElement
-    if (!(el instanceof HTMLElement)) return '(no element focus)'
-    return el.dataset['anchor'] ?? `${el.tagName.toLowerCase()}"${(el.textContent ?? '').trim().slice(0, 24)}"`
-  })
-}
-
-/**
- * Press Tab (or Shift+Tab) until the target owns document.activeElement.
- * This IS the focus-order assertion: an unreachable control exhausts the
- * budget and fails with the exact ring of stops the keyboard visited.
- */
-async function tabTo(
-  page: Page,
-  target: FocusTarget,
-  opts: { backward?: boolean; maxTabs?: number } = {},
-): Promise<void> {
-  const key = (opts.backward ?? false) ? 'Shift+Tab' : 'Tab'
-  const maxTabs = opts.maxTabs ?? 40
-  const walked: string[] = []
-  for (let i = 0; i < maxTabs; i += 1) {
-    await page.keyboard.press(key)
-    if (await focusMatches(page, target)) return
-    walked.push(await describeFocus(page))
-  }
-  throw new Error(
-    `focus never reached ${JSON.stringify(target)} after ${maxTabs} ${key} presses — ` +
-      `the keyboard walked: ${walked.join(' → ')}`,
-  )
-}
-
-/**
- * Assert the live announcer's exact text. The StatusBar appends a
- * zero-width space (U+200B) to the label on odd action counts so that two
- * identical consecutive labels still mutate the live region's text node
- * (screen readers only re-announce on mutation) — invisible and unspoken,
- * but very much part of textContent, so exact-match assertions must accept
- * an optional trailing U+200B.
- */
-function expectAnnouncement(page: Page, text: string): Promise<void> {
-  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return expect(page.locator(ANNOUNCEMENTS)).toHaveText(new RegExp(`^${escaped}\u200B?$`))
-}
-
-/** Boot the editor with EMPTY storage: land on the origin, clear
- * localStorage, reload — the session falls back to the pinned starter. */
-async function bootFresh(page: Page): Promise<void> {
-  await page.goto('/')
-  await page.evaluate(() => localStorage.clear())
-  await page.reload()
-  await expect(page.locator(CANVAS)).toBeVisible()
-}
+import {
+  ANNOUNCEMENTS,
+  bootFresh,
+  CANVAS,
+  COORDS,
+  ENTITIES_PANEL,
+  expectAnnouncement,
+  INSPECTOR,
+  LESSON,
+  SAVE_STATE,
+  tabTo,
+  THINGS_GROUP,
+  TILES_GROUP,
+  WORLD_NAME,
+} from './helpers'
 
 // ---------------------------------------------------------------------------
 // The flow
@@ -160,10 +90,11 @@ test('keyboard-only build → move → save → reload → restore-backup', asyn
   await expect(page.locator(COORDS)).toHaveText('(18, 12)')
 
   await page.keyboard.press('Enter')
-  await expectAnnouncement(page, 'painted 1 tile')
-  // The tile-painted event completes lesson step 1; the rail advances to
-  // step 2 ("Find the address (12, 4)" — a cell the starter world leaves
-  // grass, so the step is really waiting for the student).
+  // The tile-painted event completes lesson step 1, and the rail's advance
+  // speaks LAST through the one voice — so the live region ends the batch
+  // on the step announcement, not 'painted 1 tile' (the tutorial change is
+  // the news a screen-reader user needs; the paint was their own action).
+  await expectAnnouncement(page, 'step 2 of 5: Find the address (12, 4)')
   await expect(page.locator(LESSON)).toContainText('step 2 of 5')
 
   // ---- 3. Keyboard-place a crate ---------------------------------------
@@ -301,8 +232,9 @@ test('keyboard-only build → move → save → reload → restore-backup', asyn
 
 test('axe-core scan: no serious or critical violations on the booted editor', async ({ page }) => {
   await bootFresh(page)
-  // Fully booted: the lesson rail has mirrored the harness — the last panel
-  // to fill in — so the scan sees the editor a student actually meets.
+  // Fully booted: the lesson rail has published the tutorial engine's first
+  // step — the last panel to fill in — so the scan sees the editor a student
+  // actually meets.
   await expect(page.locator(`${LESSON} h2`)).toHaveText('First tiles')
   await expect(page.locator(ENTITIES_PANEL)).toContainText('player')
 
