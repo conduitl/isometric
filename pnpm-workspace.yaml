@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - apps/*
+  - content/*
 
 # One place to pin shared tool versions (pnpm catalog).
 # TypeScript is pinned to the 5.9 line deliberately: the 7.x native port is out but the
@@ -8,6 +9,15 @@ packages:
 # Upgrading to TS 7 is a recorded chore, not an accident — see docs/DECISIONS.md.
 catalog:
   zod: ^4.4.3
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  '@types/react': ^19.2.18
+  '@types/react-dom': ^19.2.4
+  '@vitejs/plugin-react': ^6.0.5
+  zustand: ^5.0.14
+  immer: ^11.1.16
+  '@playwright/test': ^1.62.1
+  '@axe-core/playwright': ^4.12.1
   '@changesets/cli': ^2.31.1
   '@types/node': ^26.2.0
   eslint: ^10.8.1

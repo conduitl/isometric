@@ -1,0 +1,15 @@
+{
+  "name": "@content/lessons",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lesson arcs and starter worlds as DATA — proving lessons are content, not code. Authored by curriculum writers; hot-reloads in the editor's dev harness without an engine build.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}

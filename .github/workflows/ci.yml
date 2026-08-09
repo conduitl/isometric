@@ -22,6 +22,14 @@ jobs:
       # the Phase 0 exit proof that the same seed + inputs give identical worlds.
       - run: pnpm test
       # Docs build is a RELEASE gate, not a merge gate (docs/DECISIONS.md R9).
-      # Visual tests (pnpm test:visual) run on a pinned local Chromium; wiring them
-      # into CI needs linux baselines blessed from a CI artifact — a recorded chore.
       - run: pnpm -r --filter '!docs' run build
+      # Phase 2 e2e gates (apps/editor/e2e): the keyboard-only build-save-reload
+      # flow and the axe-core accessibility scan. Playwright boots its own dev
+      # server; only its pinned Chromium needs installing here.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      # Perf + visual gates run on the pinned local reference profile, NOT here —
+      # shared-runner timing is noise. That covers pnpm perf (Phase 1) and
+      # pnpm perf:editor + pnpm test:visual (Phase 2); the visual baselines are
+      # blessed on the pinned local Chromium (linux CI baselines remain a
+      # recorded chore). See docs/DECISIONS.md R10/R11.

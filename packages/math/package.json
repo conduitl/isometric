@@ -1,6 +1,6 @@
 {
   "name": "@engine/math",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Literate 2D math: vectors, affine matrices, scalar helpers, seeded randomness. This package is curriculum — every exported function carries its derivation.",

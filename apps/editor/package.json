@@ -1,0 +1,38 @@
+{
+  "name": "editor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Phase 2 exit deliverable: the world editor, Builder tier — paint tiles, place and move entities, save/load with backup restore, full undo/redo — operable entirely from the keyboard. React 19 mounts the framework-free editor core exactly once; commands in, throttled subscriptions out.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@content/lessons": "workspace:*",
+    "@engine/core": "workspace:*",
+    "@engine/math": "workspace:*",
+    "@engine/projection": "workspace:*",
+    "@engine/renderer": "workspace:*",
+    "@engine/renderer-canvas2d": "workspace:*",
+    "@engine/tilemap": "workspace:*",
+    "@engine/world-format": "workspace:*",
+    "immer": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zustand": "catalog:"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "catalog:",
+    "@engine/testkit": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

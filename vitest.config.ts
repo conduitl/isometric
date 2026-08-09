@@ -15,6 +15,7 @@ const engineAliases = {
   '@engine/world-format': r('./packages/world-format/src/index.ts'),
   '@engine/tilemap': r('./packages/tilemap/src/index.ts'),
   '@engine/testkit': r('./packages/testkit/src/index.ts'),
+  '@content/lessons': r('./content/lessons/src/index.ts'),
 }
 
 export default defineConfig({
@@ -25,7 +26,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: ['packages/*/test/**/*.test.ts', 'apps/*/test/**/*.test.ts'],
+          include: ['packages/*/test/**/*.test.ts', 'apps/*/test/**/*.test.ts', 'content/*/test/**/*.test.ts'],
           exclude: [...configDefaults.exclude, '**/*.browser.test.ts'],
           environment: 'node',
         },

@@ -25,11 +25,28 @@ const trigBans = ['sin', 'cos', 'tan', 'atan2', 'atan', 'asin', 'acos'].map((fn)
   message: `Math.${fn} is banned outside @engine/math — use the Scalar wrappers. docs/DECISIONS.md D6.`,
 }))
 
+// UI frameworks never sink below the app layer — docs/ARCHITECTURE.md §6/§10. React (and its
+// state companions) live only in @app/editor's ui/ modules; the engine packages and even the
+// editor's own framework-free core must stay importable without any of them. Pattern groups
+// ('react' AND 'react/*'), not exact names — an exact-name list misses subpath entry points
+// like 'react-dom/client', and each package ships several.
+const uiFrameworkBans = ['react', 'react-dom', 'zustand', 'immer'].map((name) => ({
+  group: [name, `${name}/*`],
+  message: `'${name}' never sinks below @app/editor — the engine stays framework-free (ARCHITECTURE §6).`,
+}))
+
+// The editor's framework-free core (src/editor/**) may use zustand's vanilla store and Immer —
+// they are quarantined inside @app/editor — but React itself only above, in src/ui/** and main.tsx.
+const reactOnlyBans = ['react', 'react-dom'].map((name) => ({
+  group: [name, `${name}/*`],
+  message: `'${name}' is only allowed in apps/editor/src/ui/** and main.tsx — the editor core stays React-free (ARCHITECTURE §6).`,
+}))
+
 export default tseslint.config(
   { ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/.astro/**', '**/.vitest-attachments/**'] },
   ...tseslint.configs.recommended,
   {
-    files: ['packages/*/src/**/*.ts', 'apps/*/src/**/*.ts'],
+    files: ['packages/*/src/**/*.ts', 'apps/*/src/**/*.{ts,tsx}', 'content/*/src/**/*.ts'],
     rules: {
       'no-restricted-properties': ['error', ...determinismBans, ...trigBans],
     },
@@ -39,6 +56,20 @@ export default tseslint.config(
     files: ['packages/math/src/**/*.ts'],
     rules: {
       'no-restricted-properties': ['error', ...determinismBans],
+    },
+  },
+  {
+    files: ['packages/*/src/**/*.ts', 'content/*/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: uiFrameworkBans }],
+    },
+  },
+  {
+    // *.{ts,tsx}: a stray .tsx below editor/ must not dodge the ban — the
+    // extension IS the tell that React is leaking into the core.
+    files: ['apps/editor/src/editor/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: reactOnlyBans }],
     },
   },
 )

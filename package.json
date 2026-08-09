@@ -13,9 +13,12 @@
     "test:all": "vitest run",
     "test:watch": "vitest --project unit",
     "perf": "node scripts/perf/tilemap-budget.mjs",
+    "perf:editor": "node scripts/perf/editor-paint-budget.mjs",
+    "e2e": "pnpm --filter editor e2e",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
     "dev:demo": "pnpm --filter bedrock-demo dev",
+    "dev:editor": "pnpm --filter editor dev",
     "changeset": "changeset"
   },
   "devDependencies": {

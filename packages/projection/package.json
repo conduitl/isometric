@@ -1,6 +1,6 @@
 {
   "name": "@engine/projection",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "The curriculum centerpiece: Projections as data (ground matrix A, elevation vector e, depthKey, parameterized inverse), Camera-as-matrix, the named TransformStack, and picking = the inverse walk. Depends only on @engine/math so it can be taught standalone.",

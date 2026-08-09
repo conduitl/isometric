@@ -1,6 +1,6 @@
 {
   "name": "@engine/core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "The glass-box kernel. Phase 0 ships the deterministic Clock (fixed timestep, pause/step-tick/step-substage); the EC world store, scheduler, and events arrive in Phase 1.",

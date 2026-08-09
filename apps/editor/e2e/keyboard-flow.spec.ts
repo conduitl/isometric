@@ -1,0 +1,328 @@
+/**
+ * Phase 2 exit gate: the keyboard-only build-save-reload flow, plus the
+ * axe-core scan (docs/ROADMAP.md — "keyboard-only build-save-reload
+ * Playwright flow + axe-core scan green").
+ *
+ * Everything after page load happens through the KEYBOARD — no page.click,
+ * no mouse, no locator.focus() seeding. Focus travels exclusively by real
+ * Tab / Shift+Tab presses starting from the page's own initial focus (the
+ * body), which makes the tab ring itself an assertion: if a control ever
+ * drops out of the focus order, `tabTo` exhausts its budget and fails with
+ * the path it walked. (Tab-from-body proved reliable in headless Chromium,
+ * so the allowed fallback of seeding the first focus was never needed.)
+ *
+ * The flow leans on the pinned starter-world contract
+ * (src/editor/types.ts): a 32×24 grass ground layer with a water pond and
+ * its one-cell sand rim, a player standing at (16.5, 12.5) — the CENTER of
+ * cell (16, 12), where cell-dwellers stand — and the name "my first world";
+ * the session boots with the brush active and activeTile 1 (grass), so any
+ * real paint must first pick a different tile — water, palette value 2.
+ * Assertion strings come from THE announcement table (describeEvent in
+ * src/editor/session.ts) and the command labels
+ * (src/editor/commands/entity-commands.ts), so a wording change there fails
+ * here by design; announcer assertions go through expectAnnouncement below,
+ * which tolerates the StatusBar's zero-width re-announcement suffix.
+ *
+ * Keyboard chords use Control (not Meta) even on darwin hosts: the shell
+ * binds both (App.tsx checks `e.ctrlKey || e.metaKey`), and headless
+ * Chromium receives page-level Control+S without a browser save dialog —
+ * verified working in this suite.
+ */
+
+import { expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
+import { AxeBuilder } from '@axe-core/playwright'
+
+// ---------------------------------------------------------------------------
+// Anchor selectors — the same data-anchor ids lessons target (anchors.ts).
+// ---------------------------------------------------------------------------
+
+const CANVAS = '[data-anchor="viewport.canvas"]'
+const ANNOUNCEMENTS = '[data-anchor="status.announcements"]'
+const SAVE_STATE = '[data-anchor="status.saveState"]'
+const COORDS = '[data-anchor="status.coords"]'
+const WORLD_NAME = '[data-anchor="toolbar.worldName"]'
+const ENTITIES_PANEL = '[data-anchor="panel.entities"]'
+const INSPECTOR = '[data-anchor="panel.inspector"]'
+const LESSON = '[data-anchor="panel.lesson"]'
+const TILES_GROUP = '[data-anchor="palette.tiles"]'
+const THINGS_GROUP = '[data-anchor="palette.entities"]'
+
+/** Where focus should land: an anchored element, or a button (identified by
+ * its exact trimmed text) inside a group given as a full CSS selector. */
+type FocusTarget = { anchor: string } | { within: string; text: string }
+
+/** Does document.activeElement match the target right now? */
+function focusMatches(page: Page, target: FocusTarget): Promise<boolean> {
+  return page.evaluate((t) => {
+    const el = document.activeElement
+    if (!(el instanceof HTMLElement)) return false
+    if ('anchor' in t) return el.dataset['anchor'] === t.anchor
+    const group = document.querySelector(t.within)
+    return group !== null && group.contains(el) && (el.textContent ?? '').trim() === t.text
+  }, target)
+}
+
+/** A short name for whatever holds focus — for the failure message only. */
+function describeFocus(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const el = document.activeElement
+    if (!(el instanceof HTMLElement)) return '(no element focus)'
+    return el.dataset['anchor'] ?? `${el.tagName.toLowerCase()}"${(el.textContent ?? '').trim().slice(0, 24)}"`
+  })
+}
+
+/**
+ * Press Tab (or Shift+Tab) until the target owns document.activeElement.
+ * This IS the focus-order assertion: an unreachable control exhausts the
+ * budget and fails with the exact ring of stops the keyboard visited.
+ */
+async function tabTo(
+  page: Page,
+  target: FocusTarget,
+  opts: { backward?: boolean; maxTabs?: number } = {},
+): Promise<void> {
+  const key = (opts.backward ?? false) ? 'Shift+Tab' : 'Tab'
+  const maxTabs = opts.maxTabs ?? 40
+  const walked: string[] = []
+  for (let i = 0; i < maxTabs; i += 1) {
+    await page.keyboard.press(key)
+    if (await focusMatches(page, target)) return
+    walked.push(await describeFocus(page))
+  }
+  throw new Error(
+    `focus never reached ${JSON.stringify(target)} after ${maxTabs} ${key} presses — ` +
+      `the keyboard walked: ${walked.join(' → ')}`,
+  )
+}
+
+/**
+ * Assert the live announcer's exact text. The StatusBar appends a
+ * zero-width space (U+200B) to the label on odd action counts so that two
+ * identical consecutive labels still mutate the live region's text node
+ * (screen readers only re-announce on mutation) — invisible and unspoken,
+ * but very much part of textContent, so exact-match assertions must accept
+ * an optional trailing U+200B.
+ */
+function expectAnnouncement(page: Page, text: string): Promise<void> {
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return expect(page.locator(ANNOUNCEMENTS)).toHaveText(new RegExp(`^${escaped}\u200B?$`))
+}
+
+/** Boot the editor with EMPTY storage: land on the origin, clear
+ * localStorage, reload — the session falls back to the pinned starter. */
+async function bootFresh(page: Page): Promise<void> {
+  await page.goto('/')
+  await page.evaluate(() => localStorage.clear())
+  await page.reload()
+  await expect(page.locator(CANVAS)).toBeVisible()
+}
+
+// ---------------------------------------------------------------------------
+// The flow
+// ---------------------------------------------------------------------------
+
+test('keyboard-only build → move → save → reload → restore-backup', async ({ page }) => {
+  // Entity rows render in entityIds() order — THE deterministic order — so
+  // exact toHaveText([...]) assertions on this locator are stable.
+  const entityRows = page.locator(`${ENTITIES_PANEL} ul button`)
+
+  // ---- 1. Fresh starter boot -------------------------------------------
+  await bootFresh(page)
+  await expect(entityRows).toHaveText(['player'])
+  await expect(page.locator(`${LESSON} h2`)).toHaveText('First tiles')
+  await expect(page.locator(LESSON)).toContainText('step 1 of 5')
+  await expect(page.locator(WORLD_NAME)).toHaveValue('my first world')
+  await expect(page.locator(SAVE_STATE)).toHaveText('unsaved')
+
+  // ---- 2. Keyboard-paint water -----------------------------------------
+  // Boot state is brush + grass, and painting grass on grass is a no-op —
+  // so the first real paint starts at the water swatch (palette value 2).
+  await tabTo(page, { within: TILES_GROUP, text: 'water' })
+  await page.keyboard.press('Enter')
+  await expect(page.locator(TILES_GROUP).getByRole('button', { name: 'water' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  // Picking a tile auto-switches to the brush; the toolbar toggle agrees.
+  await expect(page.locator('[data-anchor="toolbar.brush"]')).toHaveAttribute('aria-pressed', 'true')
+
+  await tabTo(page, { anchor: 'viewport.canvas' })
+  await expect(page.locator(CANVAS)).toBeFocused()
+
+  // First arrow press SUMMONS the cursor at the layer center (16, 12) —
+  // the press spends itself on appearing; its delta is deliberately ignored.
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.locator(COORDS)).toHaveText('(16, 12)')
+  // Walk to (18, 12): clear of the pond, the player's cell, and the shore.
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowRight')
+  await expect(page.locator(COORDS)).toHaveText('(18, 12)')
+
+  await page.keyboard.press('Enter')
+  await expectAnnouncement(page, 'painted 1 tile')
+  // The tile-painted event completes lesson step 1; the rail advances to
+  // step 2 ("Find the address (12, 4)" — a cell the starter world leaves
+  // grass, so the step is really waiting for the student).
+  await expect(page.locator(LESSON)).toContainText('step 2 of 5')
+
+  // ---- 3. Keyboard-place a crate ---------------------------------------
+  // The entity palette sits before the canvas in the tab ring: Shift+Tab.
+  await tabTo(page, { within: THINGS_GROUP, text: 'crate' }, { backward: true })
+  await page.keyboard.press('Enter')
+  await expect(page.locator(THINGS_GROUP).getByRole('button', { name: 'crate' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  // Picking a marker auto-switches to the placer.
+  await expect(page.locator('[data-anchor="toolbar.placer"]')).toHaveAttribute('aria-pressed', 'true')
+
+  await tabTo(page, { anchor: 'viewport.canvas' })
+  await expect(page.locator(CANVAS)).toBeFocused()
+  // The cell cursor survives palette round-trips: still at (18, 12).
+  await page.keyboard.press('ArrowUp') // (18, 13) — its own cell (up = north = +y)
+  await expect(page.locator(COORDS)).toHaveText('(18, 13)')
+  await page.keyboard.press('Enter')
+  await expectAnnouncement(page, 'placed crate')
+  await expect(entityRows).toHaveText(['player', 'crate'])
+
+  // ---- 4. Undo/redo from the keyboard ----------------------------------
+  // Focus is on the canvas; its handler passes chords through to the
+  // window-level listener (App.tsx), which binds Control AND Meta — the
+  // suite uses Control, which headless Chromium delivers on every host.
+  await page.keyboard.press('Control+z')
+  await expectAnnouncement(page, 'undid: place crate')
+  await expect(entityRows).toHaveText(['player'])
+
+  await page.keyboard.press('Control+Shift+z')
+  await expectAnnouncement(page, 'redid: place crate')
+  await expect(entityRows).toHaveText(['player', 'crate'])
+
+  // ---- 5. Keyboard-move the crate: select → grab → carry → drop --------
+  // The keyboard twin of a pointer drag (select.ts): Enter on the SELECTED
+  // entity's cell grabs it, arrows carry the ghost cell-center to
+  // cell-center, Enter drops — one move-entity, one announcement. The redo
+  // above left the crate selected (the placer selects what it makes, and
+  // the mirror re-read the restored entity), so the walk starts by
+  // selecting a plain tile — proving on the way that Enter on a cell the
+  // selected entity does NOT stand on picks instead of grabbing.
+  await page.keyboard.press('v')
+  await expect(page.locator('[data-anchor="toolbar.select"]')).toHaveAttribute('aria-pressed', 'true')
+  // The cell cursor survived the undo/redo: still on the crate's (18, 13).
+  await page.keyboard.press('ArrowLeft') // step off to (17, 13)
+  await expect(page.locator(COORDS)).toHaveText('(17, 13)')
+  await page.keyboard.press('Enter') // selects the grass tile there
+  await expect(page.locator(INSPECTOR)).toContainText('(17, 13)')
+  await expect(page.locator(INSPECTOR)).toContainText('grass')
+  // Walk back onto the crate's cell: the selection is a tile right now, so
+  // this Enter SELECTS the crate (a pick, not a grab).
+  await page.keyboard.press('ArrowRight') // (18, 13)
+  await expect(page.locator(COORDS)).toHaveText('(18, 13)')
+  await page.keyboard.press('Enter')
+  await expect(page.locator(INSPECTOR)).toContainText('crate')
+  // The placer stood it on the CELL CENTER — the tileToWorld +0.5 lesson.
+  await expect(page.locator(INSPECTOR)).toContainText('(18.5, 13.5)')
+  // Enter again on the selected crate's own cell GRABS it; two arrows
+  // carry; Enter drops. The announcement string is describeEvent's
+  // builder.entity-moved line: "moved " + the entity's name.
+  await page.keyboard.press('Enter') // grab — silent by design
+  await page.keyboard.press('ArrowRight') // carry to (19, 13)
+  await page.keyboard.press('ArrowUp') // carry to (19, 14) — north is up
+  await expect(page.locator(COORDS)).toHaveText('(19, 14)')
+  await page.keyboard.press('Enter') // drop
+  await expectAnnouncement(page, 'moved crate')
+  // The inspector's position line moved with it: the drop cell's center.
+  await expect(page.locator(INSPECTOR)).toContainText('(19.5, 14.5)')
+
+  // ---- 6. Save with Control+S ------------------------------------------
+  await page.keyboard.press('Control+s')
+  await expectAnnouncement(page, 'saved world')
+  await expect(page.locator(SAVE_STATE)).toHaveText('saved')
+
+  const savedText = await page.evaluate(() => localStorage.getItem('editor:world'))
+  expect(savedText).not.toBeNull()
+  const savedWorld = JSON.parse(savedText ?? 'null') as { meta: { name: string } }
+  expect(savedWorld.meta.name).toBe('my first world')
+
+  // ---- 7. Reload — the world came back ---------------------------------
+  await page.reload()
+  await expect(page.locator(CANVAS)).toBeVisible()
+  await expect(entityRows).toHaveText(['player', 'crate'])
+  await expect(page.locator(SAVE_STATE)).toHaveText('saved')
+  await expect(page.locator(WORLD_NAME)).toHaveValue('my first world')
+
+  // Keyboard-verify the painted tile survived: select tool, walk the fresh
+  // cursor (summoned at center again — new session) to (18, 12), Enter.
+  await tabTo(page, { anchor: 'viewport.canvas' })
+  await expect(page.locator(CANVAS)).toBeFocused()
+  await page.keyboard.press('v')
+  await expect(page.locator('[data-anchor="toolbar.select"]')).toHaveAttribute('aria-pressed', 'true')
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.locator(COORDS)).toHaveText('(16, 12)')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowRight')
+  await expect(page.locator(COORDS)).toHaveText('(18, 12)')
+  await page.keyboard.press('Enter')
+  await expect(page.locator(INSPECTOR)).toContainText('(18, 12)')
+  await expect(page.locator(INSPECTOR)).toContainText('water')
+
+  // ---- 8. Restore-backup smoke -----------------------------------------
+  // A backup slot appears when a save demotes a previous save. Make one
+  // more visible change (paint (19, 12) water) and save again.
+  await tabTo(page, { within: TILES_GROUP, text: 'water' }, { backward: true })
+  await page.keyboard.press('Enter')
+  await tabTo(page, { anchor: 'viewport.canvas' })
+  await expect(page.locator(CANVAS)).toBeFocused()
+  await page.keyboard.press('ArrowRight') // cursor was at (18, 12)
+  await expect(page.locator(COORDS)).toHaveText('(19, 12)')
+  await page.keyboard.press('Enter')
+  await expectAnnouncement(page, 'painted 1 tile')
+
+  await page.keyboard.press('Control+s')
+  await expect(page.locator(SAVE_STATE)).toHaveText('saved')
+  const backupText = await page.evaluate(() => localStorage.getItem('editor:world.backup'))
+  expect(backupText).not.toBeNull()
+
+  // Corrupt the base slot; the boot ladder must rescue from the backup and
+  // SAY SO in the UI (state 'restored' + the student-language sentence).
+  await page.evaluate(() => localStorage.setItem('editor:world', 'garbage'))
+  await page.reload()
+  await expect(page.locator(CANVAS)).toBeVisible()
+  await expect(page.locator(SAVE_STATE)).toContainText('restored')
+  await expect(page.locator(SAVE_STATE)).toContainText('backup')
+  await expect(page.locator(ANNOUNCEMENTS)).toContainText('brought back from a backup')
+  // The backup is the FIRST save — crate included: the world truly came back.
+  await expect(entityRows).toHaveText(['player', 'crate'])
+})
+
+// ---------------------------------------------------------------------------
+// The axe-core scan
+// ---------------------------------------------------------------------------
+
+test('axe-core scan: no serious or critical violations on the booted editor', async ({ page }) => {
+  await bootFresh(page)
+  // Fully booted: the lesson rail has mirrored the harness — the last panel
+  // to fill in — so the scan sees the editor a student actually meets.
+  await expect(page.locator(`${LESSON} h2`)).toHaveText('First tiles')
+  await expect(page.locator(ENTITIES_PANEL)).toContainText('player')
+
+  const results = await new AxeBuilder({ page }).analyze()
+
+  const severe = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')
+  const lesser = results.violations.filter((v) => v.impact !== 'serious' && v.impact !== 'critical')
+
+  // Lesser violations are informational, not gate failures — but they are
+  // printed so nobody has to re-run axe by hand to learn about them.
+  if (lesser.length > 0) {
+    console.log(`[axe] ${lesser.length} non-serious violation(s), informational only:`)
+    for (const v of lesser) {
+      const targets = v.nodes.map((n) => n.target.join(' ')).join(' | ')
+      console.log(`  - ${v.id} (impact: ${v.impact ?? 'none'}): ${v.help} — at: ${targets}`)
+    }
+  }
+
+  expect(
+    severe,
+    `serious/critical axe violations:\n${JSON.stringify(severe, null, 2)}`,
+  ).toEqual([])
+})

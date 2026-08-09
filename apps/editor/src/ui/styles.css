@@ -1,0 +1,375 @@
+/*
+ * The editor's one stylesheet — the fixed CSS grid of ARCHITECTURE §6 and the
+ * dark theme the demos established (the '#0d131e' family).
+ *
+ * Layout is a FIXED grid on purpose: v1 defers docking libraries entirely
+ * (a reversible decision — the grid areas are named, so a docking system
+ * would replace this file, not the components). Three columns — left rail,
+ * viewport, right rail — between a toolbar header and a status footer. The
+ * viewport cell gives the canvas 100% of itself and nothing else: the
+ * session's ResizeObserver owns the canvas's pixel size and DPR, so CSS only
+ * ever says "fill your cell".
+ *
+ * No animations or transitions anywhere, deliberately: nothing moves unless
+ * the user moved it, so there is nothing for prefers-reduced-motion to
+ * reduce. Focus is shown with a hard outline, state with color — instant,
+ * calm, and identical for every vestibular profile.
+ */
+
+/* ------------------------------------------------------------------ tokens */
+
+:root {
+  --bg: #0d131e; /* the page — the demos' backdrop family */
+  --panel: #141b29; /* rails and toolbar surfaces */
+  --panel-edge: #232936; /* hairlines; also the viewport's "empty" color */
+  --well: #0a0f18; /* recessed wells (the viewport cell behind the canvas) */
+  --text: #dfe6f2;
+  --text-muted: #8fa0b8;
+  --accent: #8ab4ff; /* focus outlines and pressed state */
+  --accent-ink: #0d131e; /* text on top of the accent */
+  --danger: #ff9d9d;
+}
+
+/* ------------------------------------------------------------------- reset */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+#root {
+  height: 100%;
+}
+
+/* ---------------------------------------------------------- the fixed grid */
+
+.editor-frame {
+  display: grid;
+  grid-template-areas:
+    'toolbar toolbar toolbar'
+    'left viewport right'
+    'status status status';
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(230px, 290px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+}
+
+.frame-toolbar {
+  grid-area: toolbar;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-edge);
+}
+
+.frame-left {
+  grid-area: left;
+  border-right: 1px solid var(--panel-edge);
+}
+
+.frame-right {
+  grid-area: right;
+  border-left: 1px solid var(--panel-edge);
+}
+
+.frame-left,
+.frame-right {
+  background: var(--panel);
+  overflow-y: auto;
+  min-height: 0; /* lets the rail scroll instead of stretching the grid row */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The viewport cell: the canvas fills it, the ResizeObserver does the rest. */
+.frame-viewport {
+  grid-area: viewport;
+  position: relative;
+  overflow: hidden;
+  background: var(--well);
+  min-width: 0;
+  min-height: 0;
+}
+
+.frame-viewport canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.frame-status {
+  grid-area: status;
+  background: var(--panel);
+  border-top: 1px solid var(--panel-edge);
+}
+
+/* ------------------------------------------------------------------- focus */
+
+/* One loud, consistent focus ring on EVERYTHING interactive — the keyboard
+ * is a first-class pointer here (§2.5), so focus is never subtle. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* -------------------------------------------------------- buttons & inputs */
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-edge);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* Pressed (active tool, active tile, active layer…): unmistakably ON —
+ * accent fill, dark text, not just a border tint. aria-current (the
+ * selected entity row) gets the same treatment: one visual language for
+ * "this is the one". */
+button[aria-pressed='true'],
+button[aria-current='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+button[aria-current='true'] .toolbar-key {
+  color: var(--accent-ink);
+}
+
+input[type='text'] {
+  font: inherit;
+  color: var(--text);
+  background: var(--well);
+  border: 1px solid var(--panel-edge);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+/* ----------------------------------------------------------------- toolbar */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 10px;
+  border-right: 1px solid var(--panel-edge);
+}
+
+.toolbar-group:last-child {
+  border-right: none;
+}
+
+.toolbar-key {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+button[aria-pressed='true'] .toolbar-key {
+  color: var(--accent-ink);
+}
+
+/* Import/restore refusals: visible, student-language, never a dialog. */
+.toolbar-alert {
+  width: 100%;
+  color: var(--danger);
+  padding: 2px 10px 6px;
+}
+
+.toolbar-alert:empty {
+  display: none;
+  padding: 0;
+}
+
+/* ------------------------------------------------------------------ panels */
+
+.panel {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--panel-edge);
+}
+
+.panel h2 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel li > button {
+  width: 100%;
+}
+
+.swatch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.swatch-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex: none;
+}
+
+.panel-empty,
+.panel-note {
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.inspector-row {
+  margin: 4px 0;
+}
+
+.inspector-row .label {
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+
+.inspector-actions {
+  margin-top: 8px;
+}
+
+.danger {
+  color: var(--danger);
+}
+
+/* -------------------------------------------------------------- lesson rail */
+
+.lesson-rail p {
+  margin: 6px 0;
+}
+
+.lesson-rail code {
+  background: var(--well);
+  border: 1px solid var(--panel-edge);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.lesson-rail details {
+  margin-top: 6px;
+}
+
+.lesson-rail summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.lesson-step-count {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.lesson-done {
+  color: var(--accent);
+}
+
+/* -------------------------------------------------------------- status bar */
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.status-readout {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--text);
+  min-width: 7ch;
+}
+
+.save-badge {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-edge);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.save-badge.save-saved {
+  color: var(--accent);
+}
+
+.save-badge.save-error,
+.save-badge.save-restored {
+  color: var(--danger);
+}
+
+/* --------------------------------------------------------------- utilities */
+
+/* Off-screen but in the accessibility tree — the standard clip-pattern. The
+ * status bar's live region and the viewport's keyboard legend live here. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}

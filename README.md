@@ -29,14 +29,28 @@ loop pauses and single-steps; "how does clicking work?" is literally answered by
 
 ## Status
 
-**Phase 1 complete (pending commit); Phase 0 shipped.** One world file renders through profile,
-top-down, and isometric projections simultaneously with cross-view picking (`pnpm --filter
-three-windows dev`); the world format has atomic two-slot saves, migrations, salvage mode, and a
-corrupted-file fixture corpus; the tilemap cache holds 60 fps at 256×256 fully zoomed out on the
-4×-throttled reference profile (`pnpm perf` — measured ~10× faster than per-tile drawing). An
-adversarial review pass (4 reviewers, per-finding verification) confirmed 20 findings — including
-an iso/top-down mirror-image chirality bug caught while zero world files existed (decision D7) —
-and all are fixed with regression tests.
+**Phase 2 complete (pending commit); Phases 0–1 shipped.** The world editor is usable end to end
+(`pnpm dev:editor`): paint tiles, place/move/rename/delete entities, full undo/redo on the split
+substrate (Immer patches for entities, run-inverse strokes for tiles), atomic saves with backup
+restore surfaced in the UI, and every operation works **entirely from the keyboard** — proven by a
+keyboard-only build→move→save→reload→restore-backup Playwright flow plus an axe scan with zero
+violations at any severity. Drag-painting a 256×256 world holds 60 fps on the 4×-throttled
+reference profile (`pnpm perf:editor` — 8.3 ms mean against the 16.7 ms budget). The lesson
+authoring harness ships with lesson 01 ("First tiles"): a curriculum author edits a data file and
+the lesson rail hot-reloads without an engine build. The `builder.*` event vocabulary and the
+`data-anchor` registry are drafted with their governance tripwires tested. **`@engine/math`,
+`@engine/projection`, and `@engine/core` are frozen at 1.0.0** (decision D9) — after real
+consumption, per the staging rule. An adversarial review (5 reviewers, per-finding verification)
+confirmed 26 findings, all fixed with regression tests; a manual inspection of the visual baseline
+then caught one more that every automated gate had missed — the vertical arrow keys moved the
+cursor south on ArrowUp, the screen-array habit contradicting the engine's own math-class y-north
+axes (D3). The keys, the picture, and the lesson prose now agree: **up is north.**
+
+Earlier: **Phase 1** — one world file rendering through profile, top-down, and isometric
+projections simultaneously with cross-view picking (`pnpm --filter three-windows dev`); the world
+format's two-slot saves, migrations, salvage mode, and corrupted-file corpus; the tilemap cache
+(~10× per-tile drawing, `pnpm perf`); and the review that caught the iso/top-down mirror-image
+chirality bug while zero world files existed (decision D7).
 
 Earlier: **Phase 0** (bedrock) below. Architecture and roadmap defined August 2026 (four researchers, three
 independent proposals, a three-judge panel, and an adversarial red-team review — amendments folded

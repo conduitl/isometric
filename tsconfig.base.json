@@ -20,7 +20,8 @@
       "@engine/renderer-canvas2d": ["packages/renderer-canvas2d/src/index.ts"],
       "@engine/world-format": ["packages/world-format/src/index.ts"],
       "@engine/tilemap": ["packages/tilemap/src/index.ts"],
-      "@engine/testkit": ["packages/testkit/src/index.ts"]
+      "@engine/testkit": ["packages/testkit/src/index.ts"],
+      "@content/lessons": ["content/lessons/src/index.ts"]
     }
   }
 }
