@@ -26,6 +26,7 @@
 import { useEffect, useRef } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from 'react'
 import { anchor } from '../editor/anchors'
+import { KEY_ZOOM_STEP } from '../editor/camera'
 import type { EditorSession } from '../editor/types'
 
 /** Shift turns one arrow press into a five-cell stride — fast travel for
@@ -34,7 +35,7 @@ const FAST_STEP = 5
 
 const KEYBOARD_STORY =
   'world canvas — arrow keys move the cell cursor, up is north (hold Shift for 5-cell steps), ' +
-  'Enter paints or places, V/B/E switch tools'
+  'Enter paints or places, hold Space and drag to pan, V/B/E switch tools'
 
 /** The one canvas React ever mounts, wired to the session for its lifetime. */
 export function EngineViewport({ session }: { session: EditorSession }): ReactElement {
@@ -77,9 +78,15 @@ export function EngineViewport({ session }: { session: EditorSession }): ReactEl
         session.moveCursor(0, -step)
         return
       case 'Enter':
+        e.preventDefault()
+        session.actAtCursor()
+        return
       case ' ':
         e.preventDefault() // Space must never scroll the page mid-paint
-        session.actAtCursor()
+        // HOLD Space = pan standby (drag the world, the Figma grammar).
+        // A TAP still acts like Enter — the act fires on keyup below, and
+        // only when no pan rode the hold. Idempotent under key repeat.
+        session.beginSpacePan()
         return
       case 'Escape':
         session.cancelGesture()
@@ -105,11 +112,11 @@ export function EngineViewport({ session }: { session: EditorSession }): ReactEl
       }
       case '+':
       case '=':
-        session.zoomBy(1.25)
+        session.zoomBy(KEY_ZOOM_STEP)
         return
       case '-':
       case '_':
-        session.zoomBy(0.8)
+        session.zoomBy(1 / KEY_ZOOM_STEP)
         return
       case '0':
         session.resetCamera()
@@ -133,6 +140,14 @@ export function EngineViewport({ session }: { session: EditorSession }): ReactEl
     }
   }
 
+  /** Space keyup completes the tap-or-hold question keydown opened: a hold
+   * that panned already said what it meant; an untouched tap is the
+   * keyboard "act" Space has always been. */
+  const onKeyUp = (e: ReactKeyboardEvent<HTMLCanvasElement>): void => {
+    if (e.key !== ' ') return
+    if (!session.endSpacePan()) session.actAtCursor()
+  }
+
   return (
     <>
       <canvas
@@ -143,6 +158,11 @@ export function EngineViewport({ session }: { session: EditorSession }): ReactEl
         aria-label={KEYBOARD_STORY}
         aria-describedby="viewport-keyboard-legend"
         onKeyDown={onKeyDown}
+        onKeyUp={onKeyUp}
+        // Focus leaving mid-hold means the keyup will land elsewhere: end
+        // the standby now, and let the discarded return value swallow the
+        // act — losing focus is nobody's "paint here".
+        onBlur={() => void session.endSpacePan()}
       />
       {/* The long-form legend, off-screen but in the accessibility tree, so a
           screen-reader user can study the commands before entering the
@@ -150,9 +170,10 @@ export function EngineViewport({ session }: { session: EditorSession }): ReactEl
       <p id="viewport-keyboard-legend" className="visually-hidden">
         Keyboard commands inside the world canvas: arrow keys move the cell cursor one cell; hold
         Shift to move five cells at a time. Enter or Space paints, places, or selects at the cursor,
-        depending on the active tool. V selects the select tool, B the tile brush, E the entity
-        placer. Escape cancels the gesture in progress. Delete removes the selected entity. Plus and
-        minus zoom; zero refits the whole world.
+        depending on the active tool. Holding Space while dragging with the mouse pans the view
+        instead. V selects the select tool, B the tile brush, E the entity placer. Escape cancels
+        the gesture in progress. Delete removes the selected entity. Plus and minus zoom; zero
+        refits the whole world.
       </p>
     </>
   )

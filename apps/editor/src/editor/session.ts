@@ -47,7 +47,7 @@ import { createLocalStorageSlots } from '@engine/world-format'
 import type { SlotStorage } from '@engine/world-format'
 import { anchor } from './anchors'
 import type { AnchorId } from './anchors'
-import { createCameraController } from './camera'
+import { createCameraController, wheelZoomFactor } from './camera'
 import type { CameraController } from './camera'
 import { createCommandBus } from './commands/bus'
 import { createBuilderEmitter } from './events/builder'
@@ -211,6 +211,16 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
   let selection: Selection = null
   let hoverTile: PickedTile | null = null
   let cursor: { tx: number; ty: number } | null = null
+  /** Space-pan (the Figma grammar): while the spacebar is held the session
+   * stands by to PAN — the next pointerdown grabs the camera instead of the
+   * active tool. Three pieces because three questions differ: is the bar
+   * held right now (standby), did any pan actually start during this hold
+   * (engaged — endSpacePan reports it so an untouched tap can still act),
+   * and is a pan drag live at this instant (the gesture, which keeps the
+   * pointer until 'up' even if the bar lifts first). */
+  let spacePanStandby = false
+  let spacePanEngaged = false
+  let panGesture: { last: Vec2 } | null = null
   /** Brush by default: a first-run kid should paint on the very first
    * click, not puzzle over an inert select tool. */
   let activeToolId: ToolId = 'brush'
@@ -584,6 +594,29 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
     const vp = createViewport({
       canvas,
       onPointer(phase, raw): void {
+        // Space-pan intercepts BEFORE tools ever hear the pointer: a down
+        // during standby begins a camera pan, and the pan then owns the
+        // whole gesture — releasing the spacebar mid-drag does not hand a
+        // half-finished gesture to a tool that never saw its 'down'
+        // (Figma's grammar: the pan runs until the mouse lets go).
+        if (phase === 'down' && spacePanStandby) {
+          spacePanEngaged = true
+          panGesture = { last: raw.screen }
+          hover(null) // a frozen ghost sliding with the world would lie
+          viewport?.setCursor('grabbing')
+          return
+        }
+        if (panGesture !== null) {
+          if (phase === 'move') {
+            panBy(raw.screen.x - panGesture.last.x, raw.screen.y - panGesture.last.y)
+            panGesture.last = raw.screen
+          } else if (phase === 'up') {
+            panGesture = null
+            viewport?.setCursor(spacePanStandby ? 'grab' : '')
+          }
+          return
+        }
+
         // The enrichment every tool relies on: screen → world/tile through
         // the active projection's inverse, pinned to the active layer.
         const enriched = pointerToCell(doc, stack, raw.screen, activeLayer())
@@ -611,7 +644,10 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
         // deltaY 0 means "no scroll" (trackpads emit it on pure-horizontal
         // gestures and at momentum end) — it must not read as "zoom out".
         if (deltaY === 0) return
-        zoomBy(deltaY < 0 ? 1.25 : 0.8, aboutScreen)
+        // Proportional, not fixed-per-event: the factor scales with the
+        // delta (camera.ts wheelZoomFactor — the zoom-feel dials live
+        // there), so trackpad streams and wheel notches feel the same.
+        zoomBy(wheelZoomFactor(deltaY), aboutScreen)
       },
       onLeave(): void {
         hover(null)
@@ -668,10 +704,37 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
       vp.detach()
       viewport = null
       backend = null
+      // A pan cannot outlive its canvas: a later re-attach must start with
+      // a clean pointer story, not a gesture stranded mid-hold.
+      panGesture = null
+      spacePanStandby = false
+      spacePanEngaged = false
     }
   }
 
   // --- camera ---------------------------------------------------------------
+
+  /** The spacebar went down: stand by to pan. Idempotent — key auto-repeat
+   * hammers keydown, and only the FIRST press of a hold may reset the
+   * engagement record (a repeat mid-drag must not erase it). */
+  function beginSpacePan(): void {
+    if (spacePanStandby) return
+    spacePanStandby = true
+    spacePanEngaged = false
+    if (panGesture === null) viewport?.setCursor('grab')
+  }
+
+  /** The spacebar came up: leave standby and report whether any pan rode
+   * this hold — the caller uses false to treat an untouched tap as the
+   * keyboard "act" it has always been. A pan drag that is still live keeps
+   * the pointer (and its grabbing cursor) until pointerup. */
+  function endSpacePan(): boolean {
+    const engaged = spacePanEngaged
+    spacePanStandby = false
+    spacePanEngaged = false
+    if (panGesture === null) viewport?.setCursor('')
+    return engaged
+  }
 
   function zoomBy(factor: number, aboutScreen?: Vec2): void {
     cameraController.zoomBy(factor, aboutScreen)
@@ -869,6 +932,8 @@ export function createEditorSession(opts: CreateEditorSessionOptions = {}): Edit
     zoomBy,
     panBy,
     resetCamera,
+    beginSpacePan,
+    endSpacePan,
 
     attach,
     requestRender,

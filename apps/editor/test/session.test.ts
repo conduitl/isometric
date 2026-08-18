@@ -23,6 +23,7 @@ import { parseWorld, serializeWorld } from '@engine/world-format'
 import type { SlotStorage } from '@engine/world-format'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BuilderEvent } from '../src/editor/events/builder'
+import { wheelZoomFactor } from '../src/editor/camera'
 import { createEditorSession, describeEvent } from '../src/editor/session'
 import { createStarterWorld } from '../src/editor/starter'
 import { createBrushTool, createSelectTool } from '../src/editor/tools'
@@ -829,7 +830,7 @@ describe('setViewProjection — the curated view lens (ARCHITECTURE §4)', () =>
     const session = makeSession()
     const { canvas, fire } = fakeCanvas()
     const detach = session.attach(canvas)
-    fire('wheel', { deltaY: -1, clientX: 320, clientY: 210, preventDefault(): void {} })
+    fire('wheel', { deltaY: -100, clientX: 320, clientY: 210, preventDefault(): void {} })
     expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
 
     // The new matrix frames the whole world afresh — a student must never
@@ -912,7 +913,7 @@ describe('the zoom readout (fast channel) stays fresh', () => {
     vi.unstubAllGlobals()
   })
 
-  it('wheel zoom: deltaY −1 → ×1.25, 0 → ignored, +1 → ×0.8', () => {
+  it('wheel zoom is proportional: one notch each way round-trips, 0 is ignored', () => {
     stubAnimationFrames()
     const session = makeSession()
     const { canvas, fire } = fakeCanvas()
@@ -921,7 +922,8 @@ describe('the zoom readout (fast channel) stays fresh', () => {
     // honestly no pointer coordinates yet.
     expect(session.fast.last).toEqual({ world: null, tile: null, zoom: 1 })
 
-    fire('wheel', { deltaY: -1, clientX: 320, clientY: 210, preventDefault(): void {} })
+    // One full notch in (deltaY −100) is exactly one step.
+    fire('wheel', { deltaY: -100, clientX: 320, clientY: 210, preventDefault(): void {} })
     expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
 
     // deltaY 0 is "no scroll" (trackpad momentum end, pure-horizontal
@@ -929,8 +931,16 @@ describe('the zoom readout (fast channel) stays fresh', () => {
     fire('wheel', { deltaY: 0, clientX: 320, clientY: 210, preventDefault(): void {} })
     expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
 
-    fire('wheel', { deltaY: 1, clientX: 320, clientY: 210, preventDefault(): void {} })
-    expect(session.fast.last?.zoom).toBeCloseTo(1, 12) // 1.25 × 0.8
+    // A trackpad-sized nudge is a trackpad-sized zoom, not a full step —
+    // the proportional contract that killed the old per-event 1.25×.
+    fire('wheel', { deltaY: -10, clientX: 320, clientY: 210, preventDefault(): void {} })
+    expect(session.fast.last?.zoom).toBeCloseTo(1.25 * 1.25 ** 0.1, 12)
+    fire('wheel', { deltaY: 10, clientX: 320, clientY: 210, preventDefault(): void {} })
+    expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
+
+    // One full notch out returns exactly to 1: in and out are inverses.
+    fire('wheel', { deltaY: 100, clientX: 320, clientY: 210, preventDefault(): void {} })
+    expect(session.fast.last?.zoom).toBeCloseTo(1, 12)
     detach()
   })
 
@@ -942,7 +952,7 @@ describe('the zoom readout (fast channel) stays fresh', () => {
 
     const { canvas, fire } = fakeCanvas()
     const detach = session.attach(canvas)
-    fire('wheel', { deltaY: -1, clientX: 320, clientY: 210, preventDefault(): void {} })
+    fire('wheel', { deltaY: -100, clientX: 320, clientY: 210, preventDefault(): void {} })
     expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
 
     // The new world arrives, the camera rebuilds and refits: the readout
@@ -987,6 +997,101 @@ describe('the zoom readout (fast channel) stays fresh', () => {
     rect.height = 420
     for (const trigger of observers) trigger()
     expect(session.fast.last?.zoom).toBeCloseTo(1, 12)
+    detach()
+  })
+})
+
+describe('wheelZoomFactor (camera.ts — the zoom-feel dial)', () => {
+  it('one full notch is exactly one step, each way', () => {
+    expect(wheelZoomFactor(-100)).toBeCloseTo(1.25, 12)
+    expect(wheelZoomFactor(100)).toBeCloseTo(1 / 1.25, 12)
+  })
+
+  it('half-notches compose to whole ones — the property that tames trackpads', () => {
+    expect(wheelZoomFactor(-50) * wheelZoomFactor(-50)).toBeCloseTo(wheelZoomFactor(-100), 12)
+    expect(wheelZoomFactor(20) * wheelZoomFactor(80)).toBeCloseTo(wheelZoomFactor(100), 12)
+  })
+
+  it('a wild fling clamps to ±3 notches — one event can never teleport the zoom', () => {
+    expect(wheelZoomFactor(-1e6)).toBeCloseTo(1.25 ** 3, 12)
+    expect(wheelZoomFactor(1e6)).toBeCloseTo(1.25 ** -3, 12)
+  })
+})
+
+describe('space-pan (hold Space, drag to pan — the Figma grammar)', () => {
+  it('a drag during standby pans the camera and never reaches the tool', () => {
+    stubAnimationFrames()
+    const session = makeSession()
+    session.addTool(createBrushTool(session))
+    session.setActiveTile(4) // stone: a leaked paint would really change grass
+    const events: BuilderEvent[] = []
+    session.onEvent((event) => events.push(event))
+    const { canvas, fire } = fakeCanvas()
+    const detach = session.attach(canvas)
+    const before = session.stack.camera
+
+    session.beginSpacePan()
+    fire('pointerdown', { pointerId: 1, button: 0, buttons: 1, clientX: 100, clientY: 100, shiftKey: false })
+    // The tool was shielded: the brush's down would have opened a stroke.
+    expect(session.bus.strokeOpen()).toBe(false)
+    fire('pointermove', { pointerId: 1, buttons: 1, clientX: 130, clientY: 80, shiftKey: false })
+    fire('pointerup', { pointerId: 1, button: 0, clientX: 130, clientY: 80, shiftKey: false })
+    expect(session.endSpacePan()).toBe(true) // the hold carried a pan
+
+    // The picture slid with the pointer: +30 east, −20 down-screen — a pure
+    // translation, scale untouched (the axis-aligned invariant holds).
+    const after = session.stack.camera
+    expect(after.tx - before.tx).toBeCloseTo(30, 12)
+    expect(after.ty - before.ty).toBeCloseTo(-20, 12)
+    expect(after.a).toBeCloseTo(before.a, 12)
+    expect(after.b).toBe(0)
+    expect(after.c).toBe(0)
+    // No paint, no history, no events: the world never noticed the pan.
+    expect(events.filter((event) => event.type === 'builder.tile-painted')).toEqual([])
+    expect(session.store.getState().canUndo).toBe(false)
+    detach()
+  })
+
+  it('an untouched tap reports no engagement — the caller may treat it as "act"', () => {
+    const session = makeSession() // no viewport needed: state-only question
+    session.beginSpacePan()
+    expect(session.endSpacePan()).toBe(false)
+  })
+
+  it('releasing Space mid-drag keeps the pan alive until pointerup; the NEXT drag is the tool again', () => {
+    stubAnimationFrames()
+    const session = makeSession()
+    session.addTool(createBrushTool(session))
+    session.setActiveTile(4)
+    const { canvas, fire } = fakeCanvas()
+    const detach = session.attach(canvas)
+
+    session.beginSpacePan()
+    fire('pointerdown', { pointerId: 1, button: 0, buttons: 1, clientX: 200, clientY: 200, shiftKey: false })
+    expect(session.endSpacePan()).toBe(true) // Space lifts mid-drag…
+    const mid = session.stack.camera
+    fire('pointermove', { pointerId: 1, buttons: 1, clientX: 240, clientY: 210, shiftKey: false })
+    expect(session.stack.camera.tx - mid.tx).toBeCloseTo(40, 12) // …but the pan still owns the pointer
+    fire('pointerup', { pointerId: 1, button: 0, clientX: 240, clientY: 210, shiftKey: false })
+
+    // Standby is over: a fresh down belongs to the brush and opens a stroke.
+    fire('pointerdown', { pointerId: 2, button: 0, buttons: 1, clientX: 320, clientY: 210, shiftKey: false })
+    expect(session.bus.strokeOpen()).toBe(true)
+    fire('pointerup', { pointerId: 2, button: 0, clientX: 320, clientY: 210, shiftKey: false })
+    detach()
+  })
+
+  it('key auto-repeat cannot erase the engagement record', () => {
+    stubAnimationFrames()
+    const session = makeSession()
+    const { canvas, fire } = fakeCanvas()
+    const detach = session.attach(canvas)
+
+    session.beginSpacePan()
+    fire('pointerdown', { pointerId: 1, button: 0, buttons: 1, clientX: 100, clientY: 100, shiftKey: false })
+    session.beginSpacePan() // the repeat keydown mid-drag — must be a no-op
+    fire('pointerup', { pointerId: 1, button: 0, clientX: 100, clientY: 100, shiftKey: false })
+    expect(session.endSpacePan()).toBe(true) // the pan still counts: no act on keyup
     detach()
   })
 })

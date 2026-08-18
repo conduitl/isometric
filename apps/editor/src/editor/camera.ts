@@ -61,6 +61,50 @@ const MAX_ZOOM = 16
  * standing on them stay inside the fitted frame. */
 const Z_RANGE = [0, 2] as const
 
+// ---------------------------------------------------------------------------
+// Zoom feel — THE dials. Tune here, nowhere else.
+// ---------------------------------------------------------------------------
+
+/**
+ * One classic mouse-wheel notch multiplies the zoom by this. The wheel
+ * handler scales the exponent by the event's actual deltaY (see
+ * {@link wheelZoomFactor}), so a trackpad's stream of tiny deltas and a
+ * mouse wheel's chunky notches both add up to the same zoom for the same
+ * finger travel — raise for snappier, lower for calmer, and both inputs
+ * follow together.
+ */
+export const WHEEL_ZOOM_PER_NOTCH = 3
+
+/** What "one notch" means in deltaY pixels — the classic wheel click.
+ * Chromium reports 100 per notch; this is the denominator that turns a
+ * raw deltaY into a notch count. */
+export const WHEEL_NOTCH_DELTA = 100
+
+/** How far a SINGLE wheel event may zoom, in notches — a wild trackpad
+ * fling (deltaY in the thousands) becomes at most this many, so one
+ * gesture can never teleport the zoom across its whole range. */
+const WHEEL_MAX_NOTCHES = 9
+
+/** The keyboard's +/− step (EngineViewport): one press, this factor. */
+export const KEY_ZOOM_STEP = 1.25
+
+/**
+ * Turn a wheel event's deltaY into a zoom factor, PROPORTIONALLY: the
+ * exponent is the delta measured in notches, clamped to ±WHEEL_MAX_NOTCHES,
+ * and negative deltaY (scrolling up) zooms IN. deltaY −100 gives exactly
+ * WHEEL_ZOOM_PER_NOTCH; −50 gives its square root, so two half-notches
+ * compose to one whole one. That composition property is the fix for the
+ * old "way too sensitive" behavior: a fixed 1.25× per EVENT treated a
+ * trackpad's dozens of tiny events per gesture as dozens of full notches.
+ */
+export function wheelZoomFactor(deltaY: number): number {
+  const notches = Math.max(
+    -WHEEL_MAX_NOTCHES,
+    Math.min(WHEEL_MAX_NOTCHES, deltaY / WHEEL_NOTCH_DELTA),
+  )
+  return WHEEL_ZOOM_PER_NOTCH ** -notches
+}
+
 /** The camera controller the session drives (zoomBy/panBy/resetCamera). */
 export interface CameraController {
   /** Frame the whole document: fitCamera over the largest layer's world

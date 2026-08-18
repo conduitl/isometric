@@ -461,7 +461,8 @@ export interface EditorSession {
   //     active tool; it doubles as the hover ghost while keyboard-driven) ---
   readonly cursor: { readonly tx: number; readonly ty: number } | null
   moveCursor(dx: number, dy: number): void
-  /** Enter/Space: route the cursor cell to the active tool's onCursorAct. */
+  /** Enter (and a Space tap, on keyup — see endSpacePan): route the cursor
+   * cell to the active tool's onCursorAct. */
   actAtCursor(): void
   /** Esc: abandon any live gesture — the active tool's onCancel plus any
    * live preview drag. Commits nothing, emits nothing. */
@@ -475,6 +476,16 @@ export interface EditorSession {
   panBy(dxScreen: number, dyScreen: number): void
   /** Refit the whole world in the viewport (also the boot framing). */
   resetCamera(): void
+  /** Hold-Space pan, the Figma grammar: standby begins on keydown, and
+   * while it holds, a pointer drag pans the camera instead of reaching the
+   * active tool (the pan owns its whole gesture — releasing Space mid-drag
+   * does not hand the tail to a tool that never saw its 'down'). */
+  beginSpacePan(): void
+  /** Standby ends on keyup. Returns whether any pan rode the hold, so the
+   * caller can treat an untouched TAP of Space as the keyboard "act" it
+   * has always been (EngineViewport acts on keyup exactly when this
+   * answers false). */
+  endSpacePan(): boolean
 
   // --- viewport ---
   /** Adopt a canvas: size it (ResizeObserver + DPR), own its rAF loop

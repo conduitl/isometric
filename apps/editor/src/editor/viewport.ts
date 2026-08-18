@@ -59,11 +59,15 @@ export interface CreateViewportOptions {
   render(size: ViewportSize): void
 }
 
-/** The handle the session keeps: mark dirty, tear down, measure. */
+/** The handle the session keeps: mark dirty, tear down, measure, and dress
+ * the pointer (the space-pan grab cursor). */
 export interface Viewport {
   requestRender(): void
   detach(): void
   size(): ViewportSize
+  /** Set the canvas's CSS cursor ('' restores the default). The canvas is
+   * this module's property, so even a one-line style write stays here. */
+  setCursor(value: string): void
 }
 
 /**
@@ -154,7 +158,12 @@ export function createViewport(opts: CreateViewportOptions): Viewport {
     // The wheel zooms the world, never scrolls the page — preventDefault
     // needs the listener registered non-passive below.
     event.preventDefault()
-    opts.onWheel(event.deltaY, pointAt(event))
+    // Normalize deltaMode so the handler always receives PIXELS: the pinned
+    // browser (Chromium) reports mode 0, but line/page modes exist in the
+    // wild and a deltaY of 3 lines must not read as 3 pixels of zoom.
+    const deltaPx =
+      event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * 800 : event.deltaY
+    opts.onWheel(deltaPx, pointAt(event))
   }
 
   const onPointerLeave = (): void => {
@@ -187,12 +196,22 @@ export function createViewport(opts: CreateViewportOptions): Viewport {
   canvas.addEventListener('pointerleave', onPointerLeave)
   canvas.addEventListener('wheel', onWheel, { passive: false })
 
+  // Style writes guarded like capture: bare-bones test DOMs may carry no
+  // style object, and a missing cursor is a lesser experience, not a crash.
+  const setCursor = (value: string): void => {
+    const style = (canvas as { style?: { cursor: string } }).style
+    if (style !== undefined) style.cursor = value
+  }
+
   return {
     requestRender,
+
+    setCursor,
 
     detach(): void {
       if (detached) return
       detached = true
+      setCursor('') // never leave a grab cursor on a canvas nobody owns
       observer?.disconnect()
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointermove', onPointerMove)
