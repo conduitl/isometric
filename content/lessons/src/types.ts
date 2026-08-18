@@ -38,6 +38,14 @@
  *   entity with a marker stands ON a cell) and `entity-distance` (the
  *   ground-plane distance between two marker entities — the arc-2
  *   Pythagoras predicate, with a small float-dust tolerance).
+ * - **New optional `figures`** on a step ({@link StepFigure}): pictures in
+ *   the lesson document beside the prose — a plain `image` by URL, or a
+ *   `scene` the ENGINE draws (a fixture world through a named projection,
+ *   with optional lens overlays whose measured labels are computed, never
+ *   hand-typed). Presentation-only by construction: no predicate can
+ *   mention a figure, so a figure can never gate completion. Every figure
+ *   must carry non-empty `alt` text (validated) — a screen-reader student
+ *   gets the same lesson.
  * - **`all`/`any` composition, with one rule:** NO EVENT LEAVES inside a
  *   composition. An event is a moment and a composition is a state of the
  *   world; "all of [a moment, a fact]" cannot be honestly waited on, so the
@@ -64,6 +72,7 @@ export type {
   StepPredicate,
   StepEffect,
   StepTarget,
+  StepFigure,
   LensOverlaySpec,
   OverlayPoint,
 } from '@engine/tutorial'

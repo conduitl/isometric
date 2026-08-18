@@ -1,14 +1,16 @@
 /*
- * The editor's one stylesheet — the fixed CSS grid of ARCHITECTURE §6 and the
- * dark theme the demos established (the '#0d131e' family).
+ * The editor's one stylesheet — the lesson-first split frame and the dark
+ * theme the demos established (the '#0d131e' family).
  *
- * Layout is a FIXED grid on purpose: v1 defers docking libraries entirely
- * (a reversible decision — the grid areas are named, so a docking system
- * would replace this file, not the components). Three columns — left rail,
- * viewport, right rail — between a toolbar header and a status footer. The
- * viewport cell gives the canvas 100% of itself and nothing else: the
- * session's ResizeObserver owns the canvas's pixel size and DPR, so CSS only
- * ever says "fill your cell".
+ * Layout, since the 2026-08 reframe: the lesson DOCUMENT owns the left pane
+ * (a reading surface — serif, a real measure, figures), a hand-rolled
+ * divider owns the middle, and the editor owns the right as a full-bleed
+ * canvas with FLOATING chrome — a tools pill, a World card, a contextual
+ * Inspector card, each folding to a chip. Docking libraries remain
+ * deferred: the divider is ~80 lines of pointer capture in SplitDivider.tsx
+ * and the cards are absolutely-positioned children of one chrome layer.
+ * The canvas still gives its sizing to the session's ResizeObserver; CSS
+ * only ever says "fill your stage".
  *
  * No animations or transitions anywhere, deliberately: nothing moves unless
  * the user moved it, so there is nothing for prefers-reduced-motion to
@@ -22,12 +24,17 @@
   --bg: #0d131e; /* the page — the demos' backdrop family */
   --panel: #141b29; /* rails and toolbar surfaces */
   --panel-edge: #232936; /* hairlines; also the viewport's "empty" color */
-  --well: #0a0f18; /* recessed wells (the viewport cell behind the canvas) */
+  --well: #0a0f18; /* recessed wells (the stage behind the canvas) */
   --text: #dfe6f2;
   --text-muted: #8fa0b8;
   --accent: #8ab4ff; /* focus outlines and pressed state */
   --accent-ink: #0d131e; /* text on top of the accent */
   --danger: #ff9d9d;
+  --card: rgba(20, 27, 41, 0.95); /* floating chrome over the world */
+  --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  /* The lesson document's reading faces. */
+  --serif: Charter, 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
 /* ------------------------------------------------------------------- reset */
@@ -54,48 +61,280 @@ body {
   height: 100%;
 }
 
-/* ---------------------------------------------------------- the fixed grid */
+/* --------------------------------------------------------- the split frame */
 
-.editor-frame {
-  display: grid;
-  grid-template-areas:
-    'toolbar toolbar toolbar'
-    'left viewport right'
-    'status status status';
-  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(230px, 290px);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+.app-frame {
+  display: flex;
   height: 100%;
 }
 
-.frame-toolbar {
-  grid-area: toolbar;
-  background: var(--panel);
-  border-bottom: 1px solid var(--panel-edge);
+/* The banner exists for its visually-hidden h1 (axe: page-has-heading-one,
+ * heading order) — zero footprint in the flex row. */
+.app-banner {
+  position: absolute;
 }
 
-.frame-left {
-  grid-area: left;
-  border-right: 1px solid var(--panel-edge);
-}
+/* ------------------------------------------------------------- lesson pane */
 
-.frame-right {
-  grid-area: right;
-  border-left: 1px solid var(--panel-edge);
-}
-
-.frame-left,
-.frame-right {
-  background: var(--panel);
-  overflow-y: auto;
-  min-height: 0; /* lets the rail scroll instead of stretching the grid row */
+.lesson-pane {
+  position: relative;
+  flex: 0 0 auto; /* flex-basis is inline: the split percentage, or 44px parked */
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  background: var(--panel);
+  border-right: 1px solid var(--panel-edge);
+  overflow: hidden;
 }
 
-/* The viewport cell: the canvas fills it, the ResizeObserver does the rest. */
-.frame-viewport {
-  grid-area: viewport;
+.lesson-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* An author display rule must not defeat the hidden attribute (parked). */
+.lesson-body[hidden] {
+  display: none;
+}
+
+/* The parked spine: the lesson folded to a labeled 44px strip. */
+.lesson-spine {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--panel);
+  border: 0;
+  border-right: 2px solid var(--accent);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.lesson-spine span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 100%;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* The head strip: arc, the lesson picker, the step count. */
+.lesson-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 8px;
+  min-width: 0;
+}
+
+.lesson-arc {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lesson-step-count {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.lesson-picker {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.lesson-picker select {
+  font: inherit;
+  color: var(--text);
+  background: var(--well);
+  border: 1px solid var(--panel-edge);
+  border-radius: 4px;
+  padding: 3px 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+/* Progress: a quiet strip under the head; the step-count text is the
+ * accessible spelling. */
+.lesson-progress {
+  flex: 0 0 auto;
+  height: 3px;
+  background: var(--well);
+}
+
+.lesson-progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+/* The document: a real reading surface — serif, measured, scrollable. */
+.lesson-doc {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  border-top: 1px solid var(--panel-edge);
+}
+
+.lesson-doc-inner {
+  max-width: 60ch;
+  margin: 0 auto;
+  padding: 18px 22px 30px;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.lesson-doc-inner p {
+  margin: 10px 0;
+}
+
+.lesson-title {
+  margin: 4px 0 2px;
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+/* The step title reads as a kicker between title and prose. */
+.lesson-step-title {
+  margin: 16px 0 4px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.lesson-doc code {
+  background: var(--well);
+  border: 1px solid var(--panel-edge);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+/* Revealed hints stack as a real list — each one keeps its bullet so the
+ * escalation ladder reads as a ladder. */
+.lesson-doc .lesson-hints {
+  list-style: disc;
+  margin: 12px 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lesson-doc .lesson-hints p {
+  margin: 0;
+}
+
+.lesson-done {
+  color: var(--accent);
+}
+
+/* Figures: full-measure pictures with quiet captions. */
+.lesson-figure {
+  margin: 16px 0;
+}
+
+.lesson-figure img {
+  display: block;
+  max-width: 100%;
+  border-radius: 6px;
+}
+
+.lesson-figure .lesson-figure-scene {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--well);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+}
+
+.lesson-figure figcaption {
+  margin-top: 6px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* The escapes, always in reach at the pane's foot. */
+.lesson-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border-top: 1px solid var(--panel-edge);
+}
+
+/* ----------------------------------------------------------------- divider */
+
+.split-divider {
+  flex: 0 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  border-right: 1px solid var(--panel-edge);
+  cursor: col-resize;
+  touch-action: none; /* pointer capture owns the drag, even on touch */
+}
+
+.split-divider:hover,
+.split-divider:focus-visible {
+  background: #1b2434;
+}
+
+.split-grip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.split-grip i {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+/* ------------------------------------------------------------- editor pane */
+
+.editor-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* The stage: the canvas fills it, the ResizeObserver does the rest. */
+.editor-stage {
+  flex: 1;
   position: relative;
   overflow: hidden;
   background: var(--well);
@@ -103,14 +342,173 @@ body {
   min-height: 0;
 }
 
-.frame-viewport canvas {
-  display: block;
+.editor-stage canvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  display: block;
 }
 
-.frame-status {
-  grid-area: status;
+/* The chrome layer: transparent to pointers except its widgets, so every
+ * un-chromed pixel belongs to the world. */
+.stage-chrome {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The tools pill: the whole Toolbar, floating. In-flow (not absolute) so
+ * the cards' field starts BELOW it however many rows the toolbar wraps to. */
+.tools-pill {
+  pointer-events: auto;
+  align-self: center;
+  margin: 10px 10px 0;
+  max-width: calc(100% - 20px);
+  background: var(--card);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  box-shadow: var(--card-shadow);
+}
+
+/* Everything below the pill: cards pin to its corners, the dock to the
+ * bottom-left. */
+.stage-field {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+.stage-dock {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-height: calc(100% - 20px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------- overlay cards */
+
+.overlay-card {
+  pointer-events: auto;
+  background: var(--card);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Collapsed = hidden, NEVER unmounted: the data-anchor attributes inside
+ * must keep existing in the DOM (the anchor registry's promise). */
+.overlay-card.closed {
+  display: none;
+}
+
+.card-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 2px;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.card-collapse {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 0 6px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.card-collapse:hover {
+  color: var(--text);
+}
+
+.card-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.world-card {
+  width: 200px;
+}
+
+.inspector-card {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 220px;
+  max-height: calc(100% - 20px);
+}
+
+/* The Inspector card holds exactly one panel, whose own h2 already says
+ * "Inspector" — the card head therefore shrinks to just the collapse
+ * button, floated into the corner, so the title appears once. */
+.inspector-card .card-head {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 0;
+  z-index: 1;
+}
+
+.inspector-card .card-title {
+  display: none;
+}
+
+/* Panels keep their own identity inside a card; the card supplies the
+ * chrome, the hairlines separate the sections. */
+.overlay-card .panel {
+  border-bottom: 1px solid var(--panel-edge);
+}
+
+.overlay-card .panel:last-child {
+  border-bottom: none;
+}
+
+/* Chips: folded cards, waiting at the dock. */
+.chip-row {
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.chip {
+  pointer-events: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  padding: 6px 12px;
+  box-shadow: var(--card-shadow);
+  cursor: pointer;
+}
+
+.editor-status {
+  flex: 0 0 auto;
   background: var(--panel);
   border-top: 1px solid var(--panel-edge);
 }
@@ -192,6 +590,12 @@ input[type='text'] {
   border-right: none;
 }
 
+/* The world-name input can spare width before the pill wraps. */
+.toolbar-group input[type='text'] {
+  width: 130px;
+  min-width: 0;
+}
+
 .toolbar-key {
   color: var(--text-muted);
   font-size: 11px;
@@ -218,7 +622,6 @@ button[aria-pressed='true'] .toolbar-key {
 
 .panel {
   padding: 8px 10px;
-  border-bottom: 1px solid var(--panel-edge);
 }
 
 .panel h2 {
@@ -287,101 +690,6 @@ button[aria-pressed='true'] .toolbar-key {
   color: var(--danger);
 }
 
-/* -------------------------------------------------------------- lesson rail */
-
-.lesson-rail p {
-  margin: 6px 0;
-}
-
-.lesson-rail code {
-  background: var(--well);
-  border: 1px solid var(--panel-edge);
-  border-radius: 3px;
-  padding: 0 4px;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12px;
-}
-
-.lesson-rail details {
-  margin-top: 6px;
-}
-
-.lesson-rail summary {
-  cursor: pointer;
-  color: var(--text-muted);
-}
-
-.lesson-step-count {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.lesson-done {
-  color: var(--accent);
-}
-
-/* The arc label rides above the lesson title, quiet and small. */
-.lesson-arc {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.lesson-step-title {
-  margin: 4px 0 2px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-/* Revealed hints stack as a real list — each one keeps its bullet so the
- * escalation ladder reads as a ladder. (Two classes deep to outrank the
- * generic `.panel ul` reset above.) */
-.lesson-rail .lesson-hints {
-  list-style: disc;
-  margin: 6px 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.lesson-rail .lesson-hints p {
-  margin: 0;
-}
-
-.lesson-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-/* The lesson picker: label beside a select, same family as the inputs. */
-.lesson-picker {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 4px 0 6px;
-}
-
-.lesson-picker span {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.lesson-picker select {
-  font: inherit;
-  color: var(--text);
-  background: var(--well);
-  border: 1px solid var(--panel-edge);
-  border-radius: 4px;
-  padding: 3px 6px;
-  min-width: 0;
-  flex: 1;
-}
-
 /* -------------------------------------------------------------- status bar */
 
 .status-bar {
@@ -395,7 +703,7 @@ button[aria-pressed='true'] .toolbar-key {
 }
 
 .status-readout {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--mono);
   color: var(--text);
   min-width: 7ch;
 }

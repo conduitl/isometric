@@ -1,17 +1,36 @@
 /**
- * The App frame — the fixed CSS grid that holds every panel (ARCHITECTURE
- * §6: fixed grid v1, docking deferred), and the two whole-app concerns that
- * belong to no single panel:
+ * The App frame — the lesson-first split (the 2026-08 reframe: the lesson
+ * is the product, the editor its companion), and the whole-app concerns
+ * that belong to no single pane:
  *
- * 1. **The global keyboard.** Undo, redo, and save are editor-wide verbs, so
+ * 1. **The layout.** Two panes with a draggable, keyboard-operable divider:
+ *    the lesson DOCUMENT on the left, the whole editor (a full-bleed canvas
+ *    with floating chrome — EditorPane) on the right. The split ratio and
+ *    the parked state are UI preferences, persisted under
+ *    'editor:lesson-split' and restored on boot; the arithmetic lives in
+ *    split-math.ts, pure and unit-tested. (This replaced ARCHITECTURE §6's
+ *    v1 fixed grid; docking libraries stay deferred — the divider is ~80
+ *    hand-rolled lines.)
+ *
+ * 2. **The global keyboard.** Undo, redo, and save are editor-wide verbs, so
  *    they listen on `window`, not on any panel: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z
  *    (and Ctrl/Cmd+Y), Ctrl/Cmd+S. Save calls preventDefault FIRST — the
- *    browser's own save dialog must never appear over a kid's world. The
- *    handlers announce nothing themselves: every completed action's label
- *    flows through the session's `lastAction` into the status bar's live
- *    region, so there is exactly one voice.
+ *    browser's own save dialog must never appear over a kid's world. Plain
+ *    L parks/restores the lesson pane (the free-building toggle) — skipped,
+ *    like the chords, while a text field or the lesson picker owns focus.
+ *    The handlers announce nothing themselves: every completed action's
+ *    label flows through the session's `lastAction` into the status bar's
+ *    live region, so there is exactly one voice.
  *
- * 2. **useSnapshot — React's one window into the editor.** A thin wrapper
+ * 3. **Chrome reveal.** The editor's palettes and inspector float in
+ *    collapsible cards; the lesson's "show me" must be able to spotlight
+ *    anchors inside them. ANCHOR_CHROME_OWNER maps each card-dwelling
+ *    anchor to its card, and revealAnchorChrome opens the right one before
+ *    the spotlight looks — the anchor promise ("every registered anchor
+ *    exists in the mounted UI") plus one frame of patience makes the
+ *    promise VISIBLE too.
+ *
+ * 4. **useSnapshot — React's one window into the editor.** A thin wrapper
  *    over zustand v5's `useStore(store, selector)` against the session's
  *    vanilla store. Panels select single FIELDS (stable references between
  *    snapshot writes), never derived objects — a selector that built a fresh
@@ -20,26 +39,23 @@
  *    re-renders at edit rate, never pointer rate; anything pointer-rate
  *    rides the FastChannel straight past React (see StatusBar).
  *
- * The frame renders panels and hands each the session; panels call named
+ * The frame renders panes and hands each the session; panels call named
  * session methods and render snapshot fields. React never touches the
  * document — that is the whole boundary, and this file is its front door.
  */
 
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { TutorialEngine } from '@engine/tutorial'
 import { useStore } from 'zustand'
+import type { AnchorId } from '../editor/anchors'
 import type { EditorTutorialHost } from '../editor/tutorial-host'
 import type { EditorSession, EditorSnapshot } from '../editor/types'
-import { EngineViewport } from './EngineViewport'
-import { EntitiesPanel } from './panels/EntitiesPanel'
-import { EntityPalette } from './panels/EntityPalette'
-import { InspectorPanel } from './panels/InspectorPanel'
-import { LayersPanel } from './panels/LayersPanel'
-import { LessonRail } from './panels/LessonRail'
-import { StatusBar } from './panels/StatusBar'
-import { TilePalette } from './panels/TilePalette'
-import { Toolbar } from './panels/Toolbar'
+import { EditorPane } from './EditorPane'
+import { LessonPane } from './LessonPane'
+import { parkSplit, readSplitPref, unparkSplit, writeSplitPref } from './split-math'
+import type { PrefStorage, SplitState } from './split-math'
+import { SplitDivider } from './SplitDivider'
 
 /**
  * Select one slice of the editor snapshot. Every panel reads the store
@@ -50,19 +66,46 @@ export function useSnapshot<T>(session: EditorSession, selector: (snapshot: Edit
   return useStore(session.store, selector)
 }
 
-/** Is this keydown aimed at a text field? Native editing (including the
- * field's own Ctrl+Z) must win there — a rename box owns its own undo. */
+/** Is this keydown aimed at a text field (or the lesson picker)? Native
+ * editing must win there — a rename box owns its own undo, and a select's
+ * type-ahead ('l' hunts for a lesson title) must never park the pane. */
 function targetIsEditable(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
-  return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+  return (
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT' ||
+    target.isContentEditable
+  )
 }
 
-/** The editor shell: toolbar over left rail / viewport / right rail over
- * status bar, with the global keyboard attached for its lifetime. The
- * tutorial engine and its editor host ride down alongside the session for
- * the one panel that drives them (the lesson rail; the host carries the
- * parked-world verbs) — panels talk to both the same way they talk to the
- * session: named methods in, snapshot slices out. */
+/** Which overlay card owns each card-dwelling anchor — the reveal map
+ * "show me" consults before spotlighting. Anchors absent here live in
+ * always-visible chrome (the pill, the status bar, the canvas, the lesson
+ * pane itself) and need no reveal. */
+const ANCHOR_CHROME_OWNER: Partial<Record<AnchorId, 'world' | 'inspector'>> = {
+  'palette.tiles': 'world',
+  'palette.entities': 'world',
+  'panel.layers': 'world',
+  'panel.entities': 'world',
+  'panel.inspector': 'inspector',
+}
+
+/** localStorage, if this browser grants it — UI prefs degrade to defaults
+ * in private modes rather than crashing the shell. */
+function prefStorage(): PrefStorage | undefined {
+  try {
+    return window.localStorage
+  } catch {
+    return undefined
+  }
+}
+
+/** The app shell: lesson document | divider | editor surface, with the
+ * global keyboard attached for its lifetime. The tutorial engine and its
+ * editor host ride down alongside the session for the one pane that drives
+ * them — panes talk to both the same way they talk to the session: named
+ * methods in, snapshot slices out. */
 export function App({
   session,
   engine,
@@ -72,8 +115,34 @@ export function App({
   engine: TutorialEngine
   host: EditorTutorialHost
 }): ReactElement {
+  const frameRef = useRef<HTMLDivElement>(null)
+
+  const [split, setSplit] = useState<SplitState>(() => readSplitPref(prefStorage()))
+  const [worldOpen, setWorldOpen] = useState(true)
+  const [inspectorOpen, setInspectorOpen] = useState(false)
+
+  // Write-through persistence: the pref is tiny and every change is a
+  // deliberate gesture, so each one lands in storage as it happens.
+  useEffect(() => {
+    writeSplitPref(prefStorage(), split)
+  }, [split])
+
+  const revealAnchorChrome = useCallback((id: AnchorId): void => {
+    const owner = ANCHOR_CHROME_OWNER[id]
+    if (owner === 'world') setWorldOpen(true)
+    else if (owner === 'inspector') setInspectorOpen(true)
+  }, [])
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
+      // Plain L: park / restore the lesson pane. Before the chord check —
+      // it carries no modifier — but never against a focused field.
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'l' || e.key === 'L')) {
+        if (targetIsEditable(e.target)) return
+        setSplit((state) => (state.parked ? unparkSplit(state) : parkSplit(state)))
+        return
+      }
+
       if (!(e.ctrlKey || e.metaKey)) return
       const key = e.key.toLowerCase()
 
@@ -106,34 +175,32 @@ export function App({
   }, [session])
 
   return (
-    <div className="editor-frame">
-      <header className="frame-toolbar">
-        {/* The page's h1: screen-reader only, inside the banner landmark so
-            axe's page-has-heading-one and region checks both hold. Every
-            visible panel heading is an h2 under it. */}
+    <div className="app-frame" ref={frameRef}>
+      {/* The page's h1: screen-reader only, inside the banner landmark so
+          axe's page-has-heading-one and region checks both hold — and FIRST
+          in the DOM, so the heading outline opens before the lesson's h2. */}
+      <header className="app-banner">
         <h1 className="visually-hidden">World Editor</h1>
-        <Toolbar session={session} />
       </header>
 
-      <div className="frame-left">
-        <TilePalette session={session} />
-        <EntityPalette session={session} />
-        <LayersPanel session={session} />
-      </div>
+      <LessonPane
+        session={session}
+        engine={engine}
+        host={host}
+        split={split}
+        setSplit={setSplit}
+        revealAnchorChrome={revealAnchorChrome}
+      />
 
-      <main className="frame-viewport">
-        <EngineViewport session={session} />
-      </main>
+      <SplitDivider state={split} onChange={setSplit} frameRef={frameRef} />
 
-      <div className="frame-right">
-        <InspectorPanel session={session} />
-        <EntitiesPanel session={session} />
-        <LessonRail session={session} engine={engine} host={host} />
-      </div>
-
-      <footer className="frame-status">
-        <StatusBar session={session} />
-      </footer>
+      <EditorPane
+        session={session}
+        worldOpen={worldOpen}
+        inspectorOpen={inspectorOpen}
+        setWorldOpen={setWorldOpen}
+        setInspectorOpen={setInspectorOpen}
+      />
     </div>
   )
 }

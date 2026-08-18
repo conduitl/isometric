@@ -1,7 +1,6 @@
 # Roadmap
 
-> Week budgets assume 2–3 engineers plus (from Phase 2) a part-time curriculum author. They are
-> re-baselined at each phase start. Governance rules at the bottom are as binding as the phases.
+> Week budgets assume 2–3 engineers plus (from Phase 2) a part-time curriculum author. They are re-baselined at each phase start. Governance rules at the bottom are as binding as the phases.
 
 Every phase ends in something demonstrable. v1 ships at the end of Phase 3.
 
@@ -85,29 +84,22 @@ reveal as a scripted, view-only showcase lesson on a fixture world. Docs site li
 ends with a keepable world file.
 
 Scope:
-- `@engine/tutorial`: lesson-as-data schema (no UI-state predicate type — world-state + frozen
-  events only), resumable step machine, in-house DOM spotlight, world-space spotlights via lens.
-- `@engine/lens` v1: grids, axes, coordinate readouts, **right-triangle distance overlay** (pulled
-  forward — arc 2 needs it).
+- `@engine/tutorial`: lesson-as-data schema (no UI-state predicate type — world-state + frozen events only), resumable step machine, in-house DOM spotlight, world-space spotlights via lens.
+- `@engine/lens` v1: grids, axes, coordinate readouts, **right-triangle distance overlay** (pulled forward — arc 2 needs it).
 - `builder.*` event vocabulary and payload schemas frozen; lesson-replay corpus wired into CI.
 - Docs site live with the first explorable pages; Starlight build becomes a release gate.
 - Accessibility audit as exit criterion, not cleanup.
 
-Exit criteria — the launch gate: **a pilot classroom of 20+ students on school Chromebooks completes
-arcs 1–2 with <5% hitting perf or accessibility blockers**; every step gates on a semantic event or
-world predicate (zero "click Next"); tutorial state survives reload; hint/reset escapes on every
-step; a stuck student is treated as a P1 bug.
+Exit criteria — the launch gate: **a pilot classroom of 20+ students on school Chromebooks completes arcs 1–2 with <5% hitting perf or accessibility blockers**; every step gates on a semantic event or world predicate (zero "click Next"); tutorial state survives reload; hint/reset escapes on every step; a stuck student is treated as a P1 bug.
 
 ## Phase 4 — Tinkerer tier: the math becomes visible (months 7–9)
 
 **Deliverable:** the inspector opens — draggable-AND-numeric vectors via dual-representation
-binding, slope/distance/angle lenses, ghost jump-arc parabolas with editable gravity — and arcs 3–4
-ship (vectors/normalization via "diagonal is too fast", profile-view functions/slope/parabola arc).
+binding, slope/distance/angle lenses, ghost jump-arc parabolas with editable gravity — and arcs 3–4 ship (vectors/normalization via "diagonal is too fast", profile-view functions/slope/parabola arc).
 
 Scope: dual-rep binding on the preview protocol; `@engine/physics-lite` (gravity on z, Euler vs.
 semi-implicit as a visible choice); trajectory ghosts; "why 2:1?" explorable begins; `tinkerer.*`
-vocabulary frozen at exit; transfer probes (notation questions after gameplay) added to the standing
-playtest protocol — completion rates alone are the DragonBox failure mode.
+vocabulary frozen at exit; transfer probes (notation questions after gameplay) added to the standing playtest protocol — completion rates alone are the DragonBox failure mode.
 
 Exit criteria: dual binding used by 3+ unrelated panels with zero per-widget sync code; provenance
 recording off = zero measurable frame cost (budgeted CI perf test); both arcs pass

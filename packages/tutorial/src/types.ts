@@ -144,6 +144,48 @@ export type StepTarget =
   | { readonly kind: 'cell'; readonly tx: number; readonly ty: number }
   | { readonly kind: 'entity'; readonly marker: string }
 
+/**
+ * A figure a step may show inside the lesson document — a picture BESIDE the
+ * prose, presentation-only by construction: figures live on the step next to
+ * `instruction`, and {@link StepPredicate} has no way to mention them, so a
+ * figure can never gate completion (the same absence-as-guarantee that keeps
+ * UI state out of predicates).
+ *
+ * Two kinds:
+ *
+ * - **image** — a plain picture by URL. `alt` is REQUIRED (validated
+ *   non-empty): a figure a screen-reader student cannot read is half a
+ *   lesson.
+ * - **scene** — a picture the ENGINE draws: a fixture world (the host
+ *   resolves the id, exactly like a lesson's `fixture`) pushed through a
+ *   named projection, with optional lens overlays on top. The figure is
+ *   rendered by the same projection matrices and overlay code the editor
+ *   itself runs — when the prose says "legs 3 and 4, distance 5", the
+ *   triangle in the figure MEASURED that, it does not merely depict it.
+ *   An unresolvable fixture id draws nothing (quietly, like a missing
+ *   anchor) — the lesson keeps working with the prose alone.
+ */
+export type StepFigure =
+  | {
+      readonly kind: 'image'
+      readonly src: string
+      readonly alt: string
+      readonly caption?: string
+    }
+  | {
+      readonly kind: 'scene'
+      /** Fixture-world id, resolved by the host (same registry as
+       * {@link Lesson.fixture}); unknown ids draw nothing. */
+      readonly fixture: string
+      readonly projection: ViewProjectionName
+      /** Lens ink over the scene — marker endpoints resolve against the
+       * FIXTURE document, so measured labels (the right-triangle's legs)
+       * are computed, never hand-typed. */
+      readonly overlays?: ReadonlyArray<LensOverlaySpec>
+      readonly alt: string
+      readonly caption?: string
+    }
+
 export interface LessonStep {
   readonly id: string
   readonly title: string
@@ -153,6 +195,10 @@ export interface LessonStep {
   readonly hints: ReadonlyArray<string>
   readonly target?: StepTarget
   readonly onEnter?: ReadonlyArray<StepEffect>
+  /** Figures shown in the lesson document beside the instruction.
+   * Presentation-only, forever: nothing in {@link StepPredicate} can see
+   * them, so they can never gate completion. */
+  readonly figures?: ReadonlyArray<StepFigure>
   readonly completion: StepPredicate
 }
 

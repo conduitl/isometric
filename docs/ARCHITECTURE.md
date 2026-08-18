@@ -209,7 +209,14 @@ start/end state; Esc discards.
 Editor tools (tile brush, entity placer, selection) are installed through the same
 `{name, version, register(engine)}` plugin API third parties will use. Every pointer event converts
 screen→world through the active projection's inverse — the editor dogfoods the curriculum on every
-click. v1 panel layout is a fixed CSS grid (docking libraries deferred, reversible).
+click. Layout (since the 2026-08 lesson-first reframe, superseding v1's fixed grid): a two-pane
+split — the lesson document left, the whole editor right — resized by a hand-rolled
+keyboard-operable divider (~80 lines; docking libraries stay deferred), with the lesson parkable to
+a labeled spine. Inside the editor pane the canvas is full-bleed and the chrome floats
+FigJam-style: a tools pill, a World card (palettes + layers + the §2.5 entities mirror), and a
+contextual Inspector card, each collapsing to a chip. Collapse hides, never unmounts — every
+registered anchor stays in the DOM, and a lesson's "show me" re-opens the owning card before it
+spotlights.
 
 ## 7. World files
 

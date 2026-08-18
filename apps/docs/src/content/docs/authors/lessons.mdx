@@ -21,6 +21,7 @@ interface LessonStep {
   hints: string[]                   // at least one, always (validated)
   target?: StepTarget               // where "show me" points: an anchor or a world thing
   onEnter?: StepEffect[]            // declarative setup: switch the view lens, show overlays
+  figures?: StepFigure[]            // pictures in the lesson document — presentation-only, ALWAYS
   completion: StepPredicate         // when is the step done? THE load-bearing field
 }
 
@@ -108,6 +109,33 @@ vocabulary, so your steps behave predictably:
   measured numbers — `3, 4, …5` appears by itself. Overlay endpoints can be `{ marker }`
   references, resolved against the live document every frame, so the triangle between player and
   crate follows the crate as the student drags it. That following *is* the lesson.
+
+## Figures: pictures in the document
+
+A step may carry `figures` — pictures rendered in the lesson document beside your prose:
+
+```ts
+type StepFigure =
+  | { kind: 'image'; src: string; alt: string; caption?: string }
+  | { kind: 'scene'; fixture: string; projection: 'topdown' | 'iso' | 'profile';
+      overlays?: LensOverlaySpec[]; alt: string; caption?: string }
+```
+
+An `image` is a plain picture by URL. A `scene` is a picture the **engine draws**: it names a
+fixture world (same registry a lesson's `fixture` resolves through), pushes it through one of the
+three real projections, and can lay lens overlays on top. Because a scene renders through the same
+matrices and overlay code the editor viewport runs, its numbers are *measured*, never typed — the
+3-4-5 triangle in lesson 02's reveal figure computes its own `3, 4, 5` from the fixture's marker
+positions. When your caption makes a numeric claim, prefer a scene: the picture then proves it.
+
+Two rules, both validated:
+
+- **`alt` is required and non-empty** on every figure. A screen-reader student gets the same
+  lesson; write the alt text as the sentence you would say while pointing at the picture.
+- **Figures can never gate completion.** They live outside `completion` by construction — there is
+  no predicate that can mention one (the same absence-as-guarantee as the no-UI-predicates rule).
+  A figure that fails to resolve (an unknown fixture id, a dead image URL) renders as nothing, and
+  the step must still teach on prose alone.
 
 ## The authoring loop
 

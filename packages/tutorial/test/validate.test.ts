@@ -32,6 +32,16 @@ const validLesson: Lesson = {
           ],
         },
       ],
+      figures: [
+        { kind: 'image', src: 'figures/axes.svg', alt: 'The x and y axes over a grid.', caption: 'Math-class axes.' },
+        {
+          kind: 'scene',
+          fixture: 'meadow',
+          projection: 'iso',
+          overlays: [{ kind: 'right-triangle', a: { marker: 'player' }, b: { x: 3, y: 4 } }],
+          alt: 'The meadow drawn through the iso matrix.',
+        },
+      ],
       completion: { kind: 'event', type: 'builder.tile-painted', where: { tile: 2, layerId: 'ground' } },
     },
     {
@@ -428,5 +438,66 @@ describe('validateLessons: reporting', () => {
     expect(lessonLevel.length).toBeGreaterThanOrEqual(3) // id, title, arc
     expect(stepLevel.length).toBeGreaterThanOrEqual(5) // id, title, instruction, hints, event type
     expect(problems.filter((problem) => problem.lessonId === 'first-tiles')).toEqual([])
+  })
+})
+
+describe('validateLessons: figure rules', () => {
+  const withFigures = (figures: LessonStep['figures']): Lesson => oneStep({ figures })
+
+  it('flags an image figure with an empty src', () => {
+    const problems = validateLessons([withFigures([{ kind: 'image', src: ' ', alt: 'A picture.' }])])
+    expect(texts(problems)).toContainEqual(expect.stringContaining('figures[0]: src is empty'))
+  })
+
+  it('flags any figure with empty alt text — the screen-reader floor', () => {
+    for (const figures of [
+      [{ kind: 'image', src: 'figures/axes.svg', alt: '  ' }] as const,
+      [{ kind: 'scene', fixture: 'meadow', projection: 'topdown', alt: '' }] as const,
+    ]) {
+      expect(texts(validateLessons([withFigures(figures)]))).toContainEqual(
+        expect.stringContaining('alt text is empty'),
+      )
+    }
+  })
+
+  it('flags a scene figure with an empty fixture id', () => {
+    const problems = validateLessons([
+      withFigures([{ kind: 'scene', fixture: '', projection: 'iso', alt: 'A scene.' }]),
+    ])
+    expect(texts(problems)).toContainEqual(expect.stringContaining('figures[0]: fixture id is empty'))
+  })
+
+  it('rejects a scene projection outside profile | topdown | iso', () => {
+    const figure = { kind: 'scene', fixture: 'meadow', projection: 'oblique', alt: 'A scene.' }
+    const problems = validateLessons([withFigures([figure as unknown as NonNullable<LessonStep['figures']>[number]])])
+    expect(texts(problems)).toContainEqual(expect.stringContaining('unknown projection "oblique"'))
+  })
+
+  it('recurses into scene overlays with an attributed path', () => {
+    const problems = validateLessons([
+      withFigures([
+        {
+          kind: 'scene',
+          fixture: 'meadow',
+          projection: 'topdown',
+          overlays: [{ kind: 'cell-highlight', tx: 1.5, ty: 0 }],
+          alt: 'A scene.',
+        },
+      ]),
+    ])
+    expect(texts(problems)).toContainEqual(expect.stringContaining('figures[0].overlays[0]'))
+  })
+
+  it('flags a blank caption but accepts an absent one', () => {
+    expect(
+      texts(validateLessons([withFigures([{ kind: 'image', src: 'a.svg', alt: 'A picture.', caption: ' ' }])])),
+    ).toContainEqual(expect.stringContaining('caption is empty'))
+    expect(validateLessons([withFigures([{ kind: 'image', src: 'a.svg', alt: 'A picture.' }])])).toEqual([])
+  })
+
+  it('rejects an unknown figure kind arriving as raw JSON', () => {
+    const figure = { kind: 'video', src: 'a.mp4', alt: 'A clip.' }
+    const problems = validateLessons([withFigures([figure as unknown as NonNullable<LessonStep['figures']>[number]])])
+    expect(texts(problems)).toContainEqual(expect.stringContaining('unknown figure kind "video"'))
   })
 })

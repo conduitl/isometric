@@ -136,6 +136,25 @@ export const lesson02: Lesson = {
       id: 'the-other-corner',
       title: 'The 3-4-5 reveal',
       onEnter: [distanceTriangle],
+      // The reveal step carries the theorem's portrait: a clean 3-4-5
+      // triangle on the 'distance-picture' fixture, drawn by the engine —
+      // so the legs and hypotenuse in the figure are MEASURED from marker
+      // positions, never hand-typed. The student's own live triangle sits
+      // in the editor beside it; this one holds still while they read.
+      figures: [
+        {
+          kind: 'scene',
+          fixture: 'distance-picture',
+          projection: 'topdown',
+          overlays: [{ kind: 'right-triangle', a: { marker: 'player' }, b: { marker: 'crate' } }],
+          alt:
+            'A top-down grid with a player and a crate. A right triangle connects them: ' +
+            'one leg 3 cells east, one leg 4 cells north, and the slanted side measuring 5.',
+          caption:
+            'The 3-4-5 triangle, measured by the engine: 3² + 4² = 25 = 5². ' +
+            'Every straight-line distance hides a triangle like this.',
+        },
+      ],
       instruction:
         'Read the slanted side: the straight-line distance is `5`. And you can PROVE it from the ' +
         'legs you built: `3² + 4² = 9 + 16 = 25`, and `25 = 5²`. That is the whole **Pythagorean ' +

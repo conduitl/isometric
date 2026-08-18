@@ -74,6 +74,23 @@ export const lesson03: Lesson = {
       id: 'the-diamond-view',
       title: 'Squares into diamonds',
       onEnter: [{ kind: 'set-view-projection', projection: 'iso' }],
+      // The live editor is showing iso (onEnter above); the figure holds the
+      // view the student just LEFT, drawn by the engine through the same
+      // fixture — so the "nothing in the world changed" claim can be checked
+      // by eye, square against diamond, without flipping back.
+      figures: [
+        {
+          kind: 'scene',
+          fixture: 'showcase-island',
+          projection: 'topdown',
+          alt:
+            'The same island seen from straight above: water rings sand rings grass, and the ' +
+            'stone plateau is a flat colored patch — no walls, no visible height.',
+          caption:
+            'Where you just came from: the very same island through the top-down matrix. ' +
+            'Same cells, same addresses — compare the plateau.',
+        },
+      ],
       instruction:
         'Every square became a diamond — and the plateau grew walls. Here is the secret: ' +
         '**nothing in the world changed.** Not one cell, not one crate. What changed is the ' +

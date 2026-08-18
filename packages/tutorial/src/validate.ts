@@ -29,7 +29,7 @@
  */
 
 import { BUILDER_EVENT_PAYLOAD_FIELDS, resolveBuilderEventType } from './events'
-import type { Lesson, LensOverlaySpec, LessonProblem, LessonStep, OverlayPoint, StepEffect, StepPredicate, StepTarget } from './types'
+import type { Lesson, LensOverlaySpec, LessonProblem, LessonStep, OverlayPoint, StepEffect, StepFigure, StepPredicate, StepTarget } from './types'
 
 /** kebab-case: lowercase alphanumeric words joined by single hyphens.
  * Lesson and step ids must match — they end up in URLs, progress records,
@@ -110,6 +110,43 @@ function validateEffect(effect: StepEffect, path: string, flag: (problem: string
       void unhandled
       flag(`${path}: unknown effect kind "${String((effect as { kind?: unknown }).kind)}"`)
     }
+  }
+}
+
+/**
+ * Figures are presentation-only (the type system already keeps them out of
+ * predicates), so validation is about the STUDENT-facing floor: every figure
+ * must carry non-empty alt text — a screen-reader student gets the same
+ * lesson — and a scene must name a fixture and a real projection. Fixture
+ * ids are host-resolved strings, same policy as {@link Lesson.fixture}:
+ * only non-emptiness is checked here.
+ */
+function validateFigure(figure: StepFigure, path: string, flag: (problem: string) => void): void {
+  switch (figure.kind) {
+    case 'image':
+      if (isBlank(figure.src)) flag(`${path}: src is empty`)
+      break
+    case 'scene':
+      if (isBlank(figure.fixture)) {
+        flag(`${path}: fixture id is empty (the host resolves fixture ids; validation checks only non-emptiness)`)
+      }
+      if (!VIEW_PROJECTIONS.has(figure.projection)) {
+        flag(`${path}: unknown projection "${String(figure.projection)}" (expected profile | topdown | iso)`)
+      }
+      figure.overlays?.forEach((overlay, index) => validateOverlay(overlay, `${path}.overlays[${index}]`, flag))
+      break
+    default: {
+      const unhandled: never = figure
+      void unhandled
+      flag(`${path}: unknown figure kind "${String((figure as { kind?: unknown }).kind)}"`)
+      return
+    }
+  }
+  if (isBlank(figure.alt)) {
+    flag(`${path}: alt text is empty — every figure must carry a description a screen reader can speak`)
+  }
+  if (figure.caption !== undefined && isBlank(figure.caption)) {
+    flag(`${path}: caption is empty (omit it instead of shipping blank text)`)
   }
 }
 
@@ -265,6 +302,7 @@ function validateStep(step: LessonStep, flag: (problem: string) => void): void {
   })
   if (step.target !== undefined) validateTarget(step.target, flag)
   step.onEnter?.forEach((effect, index) => validateEffect(effect, `onEnter[${index}]`, flag))
+  step.figures?.forEach((figure, index) => validateFigure(figure, `figures[${index}]`, flag))
   validatePredicate(step.completion, 'completion', false, flag)
 }
 
@@ -280,8 +318,9 @@ function validateStep(step: LessonStep, flag: (problem: string) => void): void {
  * builder.entity-moved with whole-numbered coordinates, entity-distance
  * endpoints that are two DIFFERENT markers (the same marker twice measures
  * an entity against itself: always 0, never satisfiable), finite/sane
- * numbers, non-empty compositions with no event leaves inside them, and
- * non-empty fixture/anchor/marker references.
+ * numbers, non-empty compositions with no event leaves inside them,
+ * non-empty fixture/anchor/marker references, and figures that always carry
+ * speakable alt text.
  */
 export function validateLessons(lessons: ReadonlyArray<Lesson>): LessonProblem[] {
   const problems: LessonProblem[] = []

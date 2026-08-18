@@ -42,6 +42,7 @@ export type {
   LensOverlaySpec,
   StepEffect,
   StepTarget,
+  StepFigure,
   LessonStep,
   Lesson,
   TutorialProgress,

@@ -151,13 +151,69 @@ export function createShowcaseIsland(): World {
   return world
 }
 
+/** The distance-picture stage, in cells: an 8×8 grass field is all the
+ * 3-4-5 triangle needs — small enough that every cell is countable. */
+const PICTURE_SIZE = 8
+
+/**
+ * Build the 3-4-5 portrait stage for lesson figures: an 8×8 grass field
+ * with a player at the center of cell (1, 1) and a crate at the center of
+ * cell (4, 5) — legs 3 east and 4 north, so the right-triangle overlay a
+ * figure draws over it MEASURES 3, 4, and 5 from the marker positions
+ * themselves. The numbers in the picture are computed, never typed, which
+ * is the whole point of a `scene` figure. Deterministic like every fixture:
+ * plain arithmetic, no randomness, same bytes every call.
+ */
+export function createDistancePicture(): World {
+  const world = createWorld({
+    name: 'distance picture',
+    settings: { tileSize: 1, primaryProjection: 'topdown', seed: 12 },
+  })
+
+  // Same one authoring source as the island: the starter's terrain tileset.
+  const starterTileset = createStarterWorld().tilesets[0]
+  if (starterTileset === undefined) {
+    throw new Error('distance picture: the starter world lost its terrain tileset')
+  }
+  world.tilesets.push(starterTileset)
+
+  world.layers.push(
+    createTileLayer({
+      id: 'ground',
+      name: 'ground',
+      width: PICTURE_SIZE,
+      height: PICTURE_SIZE,
+      elevation: 0,
+      layerBand: 0,
+      tilesetId: 'terrain',
+      cells: new Array<number>(PICTURE_SIZE * PICTURE_SIZE).fill(GRASS),
+    }),
+  )
+
+  // Cell centers (the +0.5 lesson): (1,1) → (1.5, 1.5), (4,5) → (4.5, 5.5).
+  // Deltas 3 and 4 — the legs the figure's triangle measures.
+  spawn(world, {
+    name: 'player',
+    components: { position: { x: 1.5, y: 1.5 }, elevation: { z: 0 }, marker: { kind: 'player' } },
+  })
+  spawn(world, {
+    name: 'crate',
+    components: { position: { x: 4.5, y: 5.5 }, elevation: { z: 0 }, marker: { kind: 'crate' } },
+  })
+
+  return world
+}
+
 /**
  * The fixture catalogue the tutorial host resolves lesson `fixture` ids
- * against. Values are BUILDERS, not worlds: every load gets a fresh
- * document, so a lesson restarted after edits meets a clean stage.
+ * against — and, since figures shipped, the registry `scene` lesson figures
+ * resolve their `fixture` ids through too (ui/panels/LessonFigure.tsx).
+ * Values are BUILDERS, not worlds: every load gets a fresh document, so a
+ * lesson restarted after edits meets a clean stage.
  * Additive like every other lesson-facing registry: shipped lesson data
  * names these ids forever, so add — never rename, never remove.
  */
 export const FIXTURES: Readonly<Record<string, () => World>> = {
+  'distance-picture': createDistancePicture,
   'showcase-island': createShowcaseIsland,
 }
