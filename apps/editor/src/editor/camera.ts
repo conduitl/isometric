@@ -83,7 +83,7 @@ export const WHEEL_NOTCH_DELTA = 100
 /** How far a SINGLE wheel event may zoom, in notches — a wild trackpad
  * fling (deltaY in the thousands) becomes at most this many, so one
  * gesture can never teleport the zoom across its whole range. */
-const WHEEL_MAX_NOTCHES = 9
+export const WHEEL_MAX_NOTCHES = 9
 
 /** The keyboard's +/− step (EngineViewport): one press, this factor. */
 export const KEY_ZOOM_STEP = 1.25

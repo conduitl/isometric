@@ -128,14 +128,32 @@ body {
   color: var(--accent);
 }
 
-/* The head strip: arc, the lesson picker, the step count. */
+/* The head strip: the way back to the library, and the step count. */
 .lesson-head {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 10px 14px 8px;
   min-width: 0;
+}
+
+.lesson-back {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 3px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.lesson-back::before {
+  content: '← '; /* decoration only: the accessible name stays 'All lessons' */
+}
+
+.lesson-back:hover {
+  color: var(--text);
 }
 
 .lesson-arc {
@@ -152,21 +170,80 @@ body {
   white-space: nowrap;
 }
 
-.lesson-picker {
+/* ---- the library: click a lesson to open it */
+
+.lesson-library {
   flex: 1;
-  min-width: 0;
-  display: flex;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  background: var(--bg);
 }
 
-.lesson-picker select {
-  font: inherit;
-  color: var(--text);
-  background: var(--well);
+.lesson-library-title {
+  margin: 4px 2px 12px;
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.lesson-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lesson-list li {
+  background: var(--panel);
   border: 1px solid var(--panel-edge);
-  border-radius: 4px;
-  padding: 3px 6px;
-  min-width: 0;
-  flex: 1;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.lesson-list li.running {
+  border-color: var(--accent);
+}
+
+.lesson-list-arc {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* The lesson's name IS the button — full width, reads like a title. */
+.lesson-list li button {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 1px solid transparent;
+  padding: 2px 0;
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.lesson-list li button:hover {
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.lesson-list li button[aria-current='true'] {
+  background: none;
+  color: var(--accent);
+}
+
+.lesson-list-status {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 2px;
 }
 
 /* Progress: a quiet strip under the head; the step-count text is the
@@ -213,15 +290,77 @@ body {
   line-height: 1.25;
 }
 
-/* The step title reads as a kicker between title and prose. */
+/* The steps: ONE continuous document — every step rendered, scroll to read
+ * ahead; the machine's position paints the marks and the current rail. */
+.lesson-steps {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.lesson-step {
+  padding: 10px 0 14px 14px;
+  border-left: 2px solid var(--panel-edge);
+  scroll-margin-top: 10px; /* room above when the pane scrolls a step into view */
+}
+
+.lesson-step.current {
+  border-left-color: var(--accent);
+}
+
+.lesson-step.done {
+  border-left-color: #4ade80;
+}
+
 .lesson-step-title {
-  margin: 16px 0 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 4px;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.lesson-step.current .lesson-step-title {
   color: var(--accent);
+}
+
+/* The mark beside each step title: its number, or ✓ once completed. */
+.step-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-edge);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  transform: translateY(3px); /* optically centers the circle on the baseline row */
+}
+
+.lesson-step.current .step-mark {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.lesson-step.done .step-mark {
+  background: #4ade80;
+  border-color: #4ade80;
+  color: var(--accent-ink);
+}
+
+.lesson-finish {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  background: var(--panel);
 }
 
 .lesson-doc code {
@@ -280,15 +419,17 @@ body {
   color: var(--text-muted);
 }
 
-/* The escapes, always in reach at the pane's foot. */
+/* The escapes ride the CURRENT step, inline under its prose. */
 .lesson-actions {
-  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 10px 14px;
-  background: var(--panel);
-  border-top: 1px solid var(--panel-edge);
+  margin-top: 12px;
+}
+
+.lesson-actions button {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 12px;
 }
 
 /* ----------------------------------------------------------------- divider */

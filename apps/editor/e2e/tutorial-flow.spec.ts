@@ -20,14 +20,15 @@
  *   ("lesson world — your own world is parked and safe") and save()'s
  *   refusal ("This is a lesson world you are visiting — …").
  *
- * Keyboard-first, like keyboard-flow: the picker is driven by Tab +
- * type-ahead at least once (the lesson-02 switch — see that test for why
- * arrow keys cannot be pinned on a native select under the darwin keyboard
- * model), the view buttons by Tab + Enter for the whole three-views walk;
- * pointer-free helpers are shared via ./helpers.ts.
- * Where a keyboard twin is already proved (the picker in the reset test),
- * later tests may use selectOption — the semantics under test are the
- * engine's, not the select element's, twice over.
+ * Keyboard-first, like keyboard-flow: lesson switching goes through the
+ * LIBRARY (the lesson pane's list view — the old <select> picker retired
+ * in the all-steps redesign) and is driven by Tab + Enter at least once
+ * (the lesson-02 switch in the reset test: Tab to "All lessons", Enter,
+ * Tab to the lesson's entry, Enter); the view buttons by Tab + Enter for
+ * the whole three-views walk; pointer-free helpers are shared via
+ * ./helpers.ts. Where the keyboard twin is already proved, later tests may
+ * switch lessons by click (openLessonFromLibrary) — the semantics under
+ * test are the engine's, not the list's, twice over.
  *
  * retries: 0 (playwright.config.ts) — a flaky gate is a broken gate.
  */
@@ -152,6 +153,18 @@ function readStorage(page: Page, key: string): Promise<string | null> {
   return page.evaluate((k) => localStorage.getItem(k), key)
 }
 
+/**
+ * Open a lesson through the LIBRARY, by pointer: the "All lessons" back
+ * control, then the lesson's own button in the list (the element carrying
+ * the panel.lessonPicker anchor — the picker's duty in list form). The
+ * keyboard twin — Tab to "All lessons", Enter, Tab to the entry, Enter —
+ * is proved in the start-over test below.
+ */
+async function openLessonFromLibrary(page: Page, title: string): Promise<void> {
+  await page.locator(LESSON).getByRole('button', { name: 'All lessons' }).click()
+  await page.locator(PICKER).getByRole('button', { name: title }).click()
+}
+
 // ---------------------------------------------------------------------------
 // 1. Resume survives reload — the exit criterion, verbatim
 // ---------------------------------------------------------------------------
@@ -257,17 +270,16 @@ test('start-over on an onEnter-overlay step collapses hints without rewinding', 
   await bootFresh(page)
   await expect(page.locator(`${LESSON} h2`)).toHaveText('First tiles')
 
-  // Switch to lesson-02 with the KEYBOARD: Tab (backward — the picker sits
-  // in the rail at the end of the ring) to the select, then TYPE-AHEAD: 't'
-  // jumps the closed select to the next option starting with T ("The
-  // distance picture") and fires change. Type-ahead is the closed-select
-  // keyboard idiom that works on every platform model; arrow keys cannot be
-  // pinned here — under Chromium's darwin keyboard model they open the
-  // NATIVE popup, which headless cannot render, so they change nothing
-  // (probed and verified on this host; a platform constraint, not an app
-  // bug — the select is a native element, and its arrows never reach it).
-  await tabTo(page, { anchor: 'panel.lessonPicker' }, { backward: true })
-  await page.keyboard.press('t')
+  // Switch to lesson-02 with the KEYBOARD: Tab to the "All lessons" back
+  // control (the lesson pane's first stop on the ring), Enter into the
+  // library — focus lands on the first lesson entry — then Tab to the
+  // wanted entry and Enter to start it. This is the keyboard twin the old
+  // <select> needed type-ahead for; the library needs nothing platform-
+  // specific, because every entry is a plain button on the tab ring.
+  await tabTo(page, { within: LESSON, text: 'All lessons' })
+  await page.keyboard.press('Enter')
+  await tabTo(page, { within: PICKER, text: 'The distance picture' })
+  await page.keyboard.press('Enter')
   await expect(page.locator(`${LESSON} h2`)).toHaveText('The distance picture')
   await expect(page.locator(LESSON)).toContainText('step 1 of 5')
   await expect(page.locator(LESSON)).toContainText('Three steps east')
@@ -325,7 +337,7 @@ test('three-views parks the world, refuses save, and Back-to-my-world restores i
   await expect(entityRows).toHaveText(['player'])
 
   // ---- Switch to the fixture lesson (picker keyboard twin proved above) --
-  await page.locator(PICKER).selectOption('three-views')
+  await openLessonFromLibrary(page, 'Three views of one world')
   await expect(page.locator(`${LESSON} h2`)).toHaveText('Three views of one world')
   await expect(page.locator(LESSON)).toContainText('step 1 of 4')
   await expect(page.locator(LESSON)).toContainText('The map view')
@@ -431,7 +443,7 @@ test('reloading mid-fixture re-parks the student world and resumes on the island
 
   // Start the fixture lesson (parks the water-marked world), complete just
   // step 1 (switch to Iso), leaving the student mid-fixture on step 2.
-  await page.locator(PICKER).selectOption('three-views')
+  await openLessonFromLibrary(page, 'Three views of one world')
   await expect(entityRows).toHaveText([...ISLAND_CAST])
   await expect(page.locator(LESSON)).toContainText('step 1 of 4')
   await pressViewButton(page, 'toolbar.viewIso', { backward: true })
@@ -600,7 +612,7 @@ test('axe-core scan: no serious/critical violations across four tutorial states'
   await expect(page.locator(SPOTLIGHT_PANELS)).toHaveCount(0)
 
   // ---- State 4: the iso lens on the fixture -----------------------------
-  await page.locator(PICKER).selectOption('three-views')
+  await openLessonFromLibrary(page, 'Three views of one world')
   await expect(page.locator(ENTITIES_PANEL)).toContainText('tree')
   await page.locator(VIEW_ISO).click()
   await expect(page.locator(VIEW_ISO)).toHaveAttribute('aria-checked', 'true')

@@ -83,7 +83,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 245.01953125
+    "width": 248.421875
   },
   "right": {
     "id": "2bfae84aefd57953",
@@ -190,6 +190,8 @@
   },
   "active": "1a454a1dd5a4e05a",
   "lastOpenFiles": [
+    "apps/editor/dist/assets/index-DkVaRDuO.css",
+    "apps/editor/dist/assets/index-CUXMvYpP.js",
     "apps/docs/dist/pagefind/index/en_cb4d315.pf_index",
     "apps/docs/dist/pagefind/fragment/en_e06eef9.pf_fragment",
     "apps/docs/dist/pagefind/fragment/en_dde729b.pf_fragment",
@@ -199,8 +201,6 @@
     "apps/docs/dist/pagefind/fragment/en_73b573c.pf_fragment",
     "apps/docs/dist/pagefind/fragment/en_5c43fbf.pf_fragment",
     "apps/docs/dist/pagefind/fragment/en_34c9fd8.pf_fragment",
-    "apps/docs/dist/pagefind/wasm.unknown.pagefind",
-    "apps/docs/dist/pagefind/wasm.en.pagefind",
     "docs/RISKS.md",
     "memory/ux-design-workflow.md",
     "README.md",

@@ -23,7 +23,7 @@ import { parseWorld, serializeWorld } from '@engine/world-format'
 import type { SlotStorage } from '@engine/world-format'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BuilderEvent } from '../src/editor/events/builder'
-import { wheelZoomFactor } from '../src/editor/camera'
+import { WHEEL_MAX_NOTCHES, WHEEL_ZOOM_PER_NOTCH, wheelZoomFactor } from '../src/editor/camera'
 import { createEditorSession, describeEvent } from '../src/editor/session'
 import { createStarterWorld } from '../src/editor/starter'
 import { createBrushTool, createSelectTool } from '../src/editor/tools'
@@ -831,7 +831,7 @@ describe('setViewProjection — the curated view lens (ARCHITECTURE §4)', () =>
     const { canvas, fire } = fakeCanvas()
     const detach = session.attach(canvas)
     fire('wheel', { deltaY: -100, clientX: 320, clientY: 210, preventDefault(): void {} })
-    expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
+    expect(session.fast.last?.zoom).toBeCloseTo(WHEEL_ZOOM_PER_NOTCH, 12)
 
     // The new matrix frames the whole world afresh — a student must never
     // meet the iso lens through a viewport zoomed for top-down.
@@ -922,21 +922,22 @@ describe('the zoom readout (fast channel) stays fresh', () => {
     // honestly no pointer coordinates yet.
     expect(session.fast.last).toEqual({ world: null, tile: null, zoom: 1 })
 
-    // One full notch in (deltaY −100) is exactly one step.
+    // One full notch in (deltaY −100) is exactly one step. All assertions
+    // reference the camera.ts dial — tuning the feel must not fail them.
     fire('wheel', { deltaY: -100, clientX: 320, clientY: 210, preventDefault(): void {} })
-    expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
+    expect(session.fast.last?.zoom).toBeCloseTo(WHEEL_ZOOM_PER_NOTCH, 12)
 
     // deltaY 0 is "no scroll" (trackpad momentum end, pure-horizontal
     // gestures) — it must not zoom out.
     fire('wheel', { deltaY: 0, clientX: 320, clientY: 210, preventDefault(): void {} })
-    expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
+    expect(session.fast.last?.zoom).toBeCloseTo(WHEEL_ZOOM_PER_NOTCH, 12)
 
     // A trackpad-sized nudge is a trackpad-sized zoom, not a full step —
-    // the proportional contract that killed the old per-event 1.25×.
+    // the proportional contract that killed the old fixed-factor-per-event.
     fire('wheel', { deltaY: -10, clientX: 320, clientY: 210, preventDefault(): void {} })
-    expect(session.fast.last?.zoom).toBeCloseTo(1.25 * 1.25 ** 0.1, 12)
+    expect(session.fast.last?.zoom).toBeCloseTo(WHEEL_ZOOM_PER_NOTCH * WHEEL_ZOOM_PER_NOTCH ** 0.1, 12)
     fire('wheel', { deltaY: 10, clientX: 320, clientY: 210, preventDefault(): void {} })
-    expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
+    expect(session.fast.last?.zoom).toBeCloseTo(WHEEL_ZOOM_PER_NOTCH, 12)
 
     // One full notch out returns exactly to 1: in and out are inverses.
     fire('wheel', { deltaY: 100, clientX: 320, clientY: 210, preventDefault(): void {} })
@@ -953,7 +954,7 @@ describe('the zoom readout (fast channel) stays fresh', () => {
     const { canvas, fire } = fakeCanvas()
     const detach = session.attach(canvas)
     fire('wheel', { deltaY: -100, clientX: 320, clientY: 210, preventDefault(): void {} })
-    expect(session.fast.last?.zoom).toBeCloseTo(1.25, 12)
+    expect(session.fast.last?.zoom).toBeCloseTo(WHEEL_ZOOM_PER_NOTCH, 12)
 
     // The new world arrives, the camera rebuilds and refits: the readout
     // must say so instead of showing the OLD world's 1.25.
@@ -1002,9 +1003,9 @@ describe('the zoom readout (fast channel) stays fresh', () => {
 })
 
 describe('wheelZoomFactor (camera.ts — the zoom-feel dial)', () => {
-  it('one full notch is exactly one step, each way', () => {
-    expect(wheelZoomFactor(-100)).toBeCloseTo(1.25, 12)
-    expect(wheelZoomFactor(100)).toBeCloseTo(1 / 1.25, 12)
+  it('one full notch is exactly one step (the dial), each way', () => {
+    expect(wheelZoomFactor(-100)).toBeCloseTo(WHEEL_ZOOM_PER_NOTCH, 12)
+    expect(wheelZoomFactor(100)).toBeCloseTo(1 / WHEEL_ZOOM_PER_NOTCH, 12)
   })
 
   it('half-notches compose to whole ones — the property that tames trackpads', () => {
@@ -1012,9 +1013,9 @@ describe('wheelZoomFactor (camera.ts — the zoom-feel dial)', () => {
     expect(wheelZoomFactor(20) * wheelZoomFactor(80)).toBeCloseTo(wheelZoomFactor(100), 12)
   })
 
-  it('a wild fling clamps to ±3 notches — one event can never teleport the zoom', () => {
-    expect(wheelZoomFactor(-1e6)).toBeCloseTo(1.25 ** 3, 12)
-    expect(wheelZoomFactor(1e6)).toBeCloseTo(1.25 ** -3, 12)
+  it('a wild fling clamps to the notch cap — one event can never teleport the zoom', () => {
+    expect(wheelZoomFactor(-1e6)).toBeCloseTo(WHEEL_ZOOM_PER_NOTCH ** WHEEL_MAX_NOTCHES, 8)
+    expect(wheelZoomFactor(1e6)).toBeCloseTo(WHEEL_ZOOM_PER_NOTCH ** -WHEEL_MAX_NOTCHES, 12)
   })
 })
 
