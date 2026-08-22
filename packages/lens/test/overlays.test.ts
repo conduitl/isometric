@@ -8,8 +8,8 @@
 
 import { createWorld, spawn } from '@engine/core'
 import type { Entity, World } from '@engine/core'
-import { createTopDown, createTransformStack } from '@engine/projection'
-import type { WorldPoint } from '@engine/projection'
+import { createIso, createTopDown, createTransformStack } from '@engine/projection'
+import type { TransformStack, WorldPoint } from '@engine/projection'
 import { createNullBackend } from '@engine/renderer'
 import type { LensOverlaySpec } from '@engine/tutorial'
 import { describe, expect, it } from 'vitest'
@@ -18,14 +18,17 @@ import { drawLensOverlays } from '../src/overlays'
 /** Draw overlays into one recorded frame and return the commands between the
  * begin/end sandwich (the overlay ink and nothing else). The optional
  * entityOverride is the contract's fifth parameter — the editor's mid-drag
- * ghost — passed straight through. */
+ * ghost — passed straight through. `stack` defaults to the top-down identity
+ * stack every existing test was written against; cell-highlight's `z` needs
+ * a projection that actually SHOWS elevation (top-down's e = (0,0) throws z
+ * away), so that one test passes an iso stack instead. */
 function draw(
   doc: World,
   overlays: LensOverlaySpec[],
   entityOverride?: { readonly id: string; readonly point: WorldPoint } | null,
+  stack: TransformStack = createTransformStack(createTopDown()),
 ): Array<Record<string, unknown>> {
   const backend = createNullBackend()
-  const stack = createTransformStack(createTopDown())
   backend.beginFrame({ width: 640, height: 420, dpr: 1 })
   drawLensOverlays(backend, stack, doc, overlays, entityOverride)
   backend.endFrame()
@@ -79,6 +82,36 @@ describe('cell-highlight', () => {
       { x: 6, y: -6 },
       { x: 6, y: -8 },
       { x: 4, y: -8 },
+    ])
+  })
+
+  it('rings the cell at its ELEVATION when `z` is given — a raised highlight sits on the slab, not the floor beneath it', () => {
+    // Top-down cannot show this (its elevation vector is (0,0) — z vanishes),
+    // so this one test drives the SAME overlay through iso instead.
+    const iso = createTransformStack(createIso())
+    const raised = draw(createWorld(), [{ kind: 'cell-highlight', tx: 2, ty: 3, z: 4 }], null, iso)
+    const [outline] = ofKind(raised, 'polyline')
+    expect(outline).toMatchObject({ closed: true, stroke: '#ffd166', lineWidth: 2.5 })
+    // Cell (2, 3), tileSize 1, z 4, through iso's project(x, y, z) =
+    // (x + y, (x − y)/2 − z):
+    expectPoints(outline!['points'], [
+      { x: 5, y: -4.5 }, // (2, 3, 4)
+      { x: 6, y: -4 }, // (3, 3, 4)
+      { x: 7, y: -4.5 }, // (3, 4, 4)
+      { x: 6, y: -5 }, // (2, 4, 4)
+    ])
+
+    // The SAME cell with z omitted (default ground): every corner lands
+    // exactly 4 world-z-units higher on screen — iso's elevation vector is
+    // (0, −k), k = 1 — proving the raised ring is not just this same ground
+    // outline in disguise.
+    const ground = draw(createWorld(), [{ kind: 'cell-highlight', tx: 2, ty: 3 }], null, iso)
+    const [groundOutline] = ofKind(ground, 'polyline')
+    expectPoints(groundOutline!['points'], [
+      { x: 5, y: -0.5 },
+      { x: 6, y: 0 },
+      { x: 7, y: -0.5 },
+      { x: 6, y: -1 },
     ])
   })
 })

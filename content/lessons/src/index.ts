@@ -15,7 +15,9 @@
  * test/replay-corpus.test.ts — both run in CI on every PR.
  */
 
+import { lesson00 } from './lesson-00-paint-by-numbers'
 import { lesson01 } from './lesson-01-first-tiles'
+import { lessonThirdNumber } from './lesson-01-the-third-number'
 import { lesson02 } from './lesson-02-the-distance-picture'
 import { lesson03 } from './lesson-03-three-views'
 import type { Lesson } from './types'
@@ -36,9 +38,26 @@ export type {
 // keeps compiling; new code uses the names above.
 export type { LessonDraft, LessonStepDraft, StepPredicateDraft } from './types'
 
+export { lesson00 } from './lesson-00-paint-by-numbers'
 export { lesson01 } from './lesson-01-first-tiles'
+export { lessonThirdNumber } from './lesson-01-the-third-number'
 export { lesson02 } from './lesson-02-the-distance-picture'
 export { lesson03 } from './lesson-03-three-views'
 
-/** Every shipped lesson, in curriculum order. */
-export const lessons: readonly Lesson[] = [lesson01, lesson02, lesson03]
+/**
+ * Every shipped lesson, in curriculum order — and THIS ARRAY is the source
+ * of truth for that order, not the filenames. Lesson 00 leads: it is the
+ * first thing a new student meets, so it teaches addresses and nothing else.
+ * 'the-third-number' follows immediately, adding `z` to the same bear before
+ * lesson 01 hands the student the whole editor.
+ *
+ * Two files therefore carry an `01` prefix ('lesson-01-first-tiles.ts' and
+ * 'lesson-01-the-third-number.ts'), which is history rather than ambiguity:
+ * shipped files keep their names here — ids are permanent (progress records,
+ * replay corpus) and filenames stay stable — so a lesson inserted into the
+ * middle of the sequence takes the position it wants in this array and
+ * exports under its own name. Hence `lessonThirdNumber` beside the numeric
+ * aliases: `lesson01` was already spoken for, and renaming a shipped symbol
+ * to free it would buy tidiness with churn.
+ */
+export const lessons: readonly Lesson[] = [lesson00, lessonThirdNumber, lesson01, lesson02, lesson03]

@@ -99,3 +99,22 @@ export async function bootFresh(page: Page): Promise<void> {
   await page.reload()
   await expect(page.locator(CANVAS)).toBeVisible()
 }
+
+/**
+ * Switch lessons through the LIBRARY, KEYBOARD only: Tab to the "All
+ * lessons" back control on whatever lesson document is currently showing,
+ * Enter into the list, Tab to the wanted entry, Enter to start it — the
+ * keyboard twin of a pointer's openLessonFromLibrary (tutorial-flow.spec.ts).
+ * Both suites need this crossing (a fresh boot now opens the catalogue's
+ * first lesson, so keyboard-flow's starter-world walkthrough must reach
+ * 'First tiles' by keyboard, and tutorial-flow's reset test proves the twin
+ * by using it too), so it lives here rather than in either file. The picker
+ * anchor (panel.lessonPicker) is inlined rather than exported: no other
+ * crossing needs it.
+ */
+export async function openLessonFromLibraryByKeyboard(page: Page, title: string): Promise<void> {
+  await tabTo(page, { within: LESSON, text: 'All lessons' })
+  await page.keyboard.press('Enter')
+  await tabTo(page, { within: '[data-anchor="panel.lessonPicker"]', text: title })
+  await page.keyboard.press('Enter')
+}

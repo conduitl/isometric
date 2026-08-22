@@ -24,6 +24,16 @@
  * plumbing in ./helpers.ts, alongside tabTo and the anchor selectors),
  * which tolerates the StatusBar's zero-width re-announcement suffix.
  *
+ * A fresh boot with no stored progress now greets the student with the
+ * catalogue's FIRST lesson, 'Paint by numbers' — a fixture lesson that parks
+ * whatever world was live (main.tsx). This suite's subject is the starter
+ * world, walked by 'First tiles' (now second), so the build flow opens that
+ * lesson from the library, KEYBOARD-only, before it starts — the twin of
+ * tutorial-flow's pointer openLessonFromLibrary, shared here as
+ * openLessonFromLibraryByKeyboard (./helpers.ts). Opening a NON-fixture
+ * lesson restores the boot-parked starter world first (LessonPane.
+ * openLesson), so the walkthrough below meets exactly the contract above.
+ *
  * Keyboard chords use Control (not Meta) even on darwin hosts: the shell
  * binds both (App.tsx checks `e.ctrlKey || e.metaKey`), and headless
  * Chromium receives page-level Control+S without a browser save dialog —
@@ -41,12 +51,19 @@ import {
   expectAnnouncement,
   INSPECTOR,
   LESSON,
+  openLessonFromLibraryByKeyboard,
   SAVE_STATE,
   tabTo,
   THINGS_GROUP,
   TILES_GROUP,
   WORLD_NAME,
 } from './helpers'
+
+/** The save badge right after opening a non-fixture lesson from the library
+ * with a park waiting (session.ts PARK_RESTORED_MESSAGE): the restored
+ * bytes sit in NO save slot until the student saves, so the badge stays
+ * honestly 'unsaved' with the keep-it message appended. */
+const PARK_RESTORED_BADGE = 'back from the lesson — press Ctrl+S to keep your world'
 
 // ---------------------------------------------------------------------------
 // The flow
@@ -57,13 +74,27 @@ test('keyboard-only build → move → save → reload → restore-backup', asyn
   // exact toHaveText([...]) assertions on this locator are stable.
   const entityRows = page.locator(`${ENTITIES_PANEL} ul button`)
 
-  // ---- 1. Fresh starter boot -------------------------------------------
+  // ---- 1. Fresh boot, then keyboard-switch to 'First tiles' -------------
+  // Fresh boot now opens 'Paint by numbers' on the bear-portrait fixture
+  // (main.tsx) — this flow is First tiles's own starter-world walkthrough,
+  // so it opens that lesson from the library first. Keyboard-only, like
+  // every other step here: 'All lessons' is the lesson pane's own back
+  // control, reachable the moment a lesson document is on screen.
   await bootFresh(page)
+  await expect(page.locator(`${LESSON} h2`)).toHaveText('Paint by numbers')
+  await openLessonFromLibraryByKeyboard(page, 'First tiles')
+
+  // Opening a NON-fixture lesson restores the boot-parked starter world
+  // first (LessonPane.openLesson), so the walkthrough meets exactly the
+  // starter-world contract the header describes. The badge is honestly
+  // UNSAVED with the keep-it message: the just-restored bytes sit in no
+  // save slot yet — 'saved' here would be a silent data-loss window.
   await expect(entityRows).toHaveText(['player'])
   await expect(page.locator(`${LESSON} h2`)).toHaveText('First tiles')
   await expect(page.locator(LESSON)).toContainText('step 1 of 5')
   await expect(page.locator(WORLD_NAME)).toHaveValue('my first world')
-  await expect(page.locator(SAVE_STATE)).toHaveText('unsaved')
+  await expect(page.locator(SAVE_STATE)).toContainText('unsaved')
+  await expect(page.locator(SAVE_STATE)).toContainText(PARK_RESTORED_BADGE)
 
   // ---- 2. Keyboard-paint water -----------------------------------------
   // Boot state is brush + grass, and painting grass on grass is a no-op —
@@ -234,9 +265,11 @@ test('axe-core scan: no serious or critical violations on the booted editor', as
   await bootFresh(page)
   // Fully booted: the lesson rail has published the tutorial engine's first
   // step — the last panel to fill in — so the scan sees the editor a student
-  // actually meets.
-  await expect(page.locator(`${LESSON} h2`)).toHaveText('First tiles')
-  await expect(page.locator(ENTITIES_PANEL)).toContainText('player')
+  // actually meets. That is 'Paint by numbers' on the bear-portrait fixture
+  // now (main.tsx) — a pixel-art character carries no entities, so the
+  // panel shows its own empty state instead of 'player'.
+  await expect(page.locator(`${LESSON} h2`)).toHaveText('Paint by numbers')
+  await expect(page.locator(ENTITIES_PANEL)).toContainText('Nothing in the world yet')
 
   const results = await new AxeBuilder({ page }).analyze()
 

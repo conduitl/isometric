@@ -209,6 +209,25 @@ describe('v1 caps — pre-release limits, refused in student language', () => {
     expect(failed(JSON.stringify(negative)).message).toContain('1,048,576')
   })
 
+  it('rejects a layer whose base is not less than its elevation, naming the slab rule', () => {
+    const doc = islandDoc()
+    const layer = must(doc.layers[0]) // elevation 0
+    layer.base = 0 // base must be STRICTLY less than elevation — a slab needs positive height
+    const error = failed(JSON.stringify(doc))
+    expect(error.code).toBe('invalid-structure')
+    expect(error.message).toContain('layers → #1 → base')
+    expect(error.message).toContain('than its elevation')
+    expectStudentLegible(error.message)
+
+    // A properly rooted slab (base < elevation) is legal — raising the
+    // layer's elevation makes base: 0 pass, proving this rejects the
+    // RELATIONSHIP, not the mere presence of a base field.
+    const raised = islandDoc()
+    must(raised.layers[0]).elevation = 1
+    must(raised.layers[0]).base = 0
+    expect(parseWorld(JSON.stringify(raised)).ok).toBe(true)
+  })
+
   it('the island fixture sits inside every cap, untouched, and still parses', () => {
     expect(parseWorld(fixture('v1-island.world.json')).ok).toBe(true)
   })

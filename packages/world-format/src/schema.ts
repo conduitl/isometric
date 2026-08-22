@@ -175,6 +175,14 @@ export const layerBaseSchema = z.object({
         'a school Chromebook can redraw in one frame; build bigger places out of several layers',
     }),
   elevation: z.number(),
+  // The slab's bottom — OPTIONAL and additive, same governance shape as the
+  // existing atCell/toCell predicate fields: an old file with no `base` key
+  // parses exactly as it always did (TileLayer.base, @engine/core). Plain
+  // z.number() already excludes NaN/±Infinity (finite by construction, same
+  // as `elevation` above); the base < elevation cross-check lives in
+  // layerSchema's superRefine below, next to the cell-count check, since it
+  // is a relationship between two fields rather than a shape of one.
+  base: z.number().optional(),
   layerBand: wholeNumber('layerBand').refine((v) => Math.abs(v) <= MAX_LAYER_BAND, {
     message:
       'layerBand must stay between -1,048,576 and 1,048,576 (a million bands is plenty) — ' +
@@ -199,6 +207,15 @@ const layerSchema = layerBaseSchema.superRefine((layer, ctx) => {
       message:
         `this layer says it is ${layer.width}×${layer.height}, so it needs exactly ` +
         `${expected} numbers in its cells list, but it has ${layer.cells.length}`,
+    })
+  }
+  if (layer.base !== undefined && layer.base >= layer.elevation) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['base'],
+      message:
+        `a layer's base (${layer.base}) must be LESS than its elevation (${layer.elevation}) — ` +
+        'base is the slab\'s bottom and elevation is its top, so a slab needs positive height',
     })
   }
 })

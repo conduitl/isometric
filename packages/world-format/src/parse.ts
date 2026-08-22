@@ -356,6 +356,10 @@ function toLayer(parsed: ParsedLayerBase, cells: ReadonlyArray<number>): TileLay
     // a Uint16Array — the one deliberate exception to JSON-everywhere,
     // made for tile-painting speed (docs/ARCHITECTURE.md §3).
     cells: Uint16Array.from(cells),
+    // `base` round-trips only when the file had it — same "store only when
+    // provided" contract as @engine/tilemap's createTileLayer, so a layer
+    // loaded from an old, base-less file is shaped exactly as it always was.
+    ...(parsed.base === undefined ? {} : { base: parsed.base }),
   }
 }
 

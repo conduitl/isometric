@@ -56,10 +56,20 @@ import type { TransformStack } from '@engine/projection'
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 16
 
-/** The world's elevation range for camera fitting: ground to two units up —
- * the same headroom the Phase 1 demo used, so plateaus and the things
- * standing on them stay inside the fitted frame. */
-const Z_RANGE = [0, 2] as const
+/**
+ * The world's elevation range for camera fitting: ground up to whichever is
+ * taller, two units (the Phase 1 demo's headroom, so plateaus and the things
+ * standing on them stay inside the fitted frame) or the world's own highest
+ * layer. A flat or gently-raised world still fits exactly as before — the
+ * floor of 2 is unconditional — but a tall stack (a 10-slice voxel figure,
+ * say, with a layer elevated to z = 10) needs the ceiling raised to match or
+ * its top slices paint above the frame and get cropped.
+ */
+export function fitZRange(doc: World): readonly [number, number] {
+  let highest = 2
+  for (const layer of doc.layers) highest = Math.max(highest, layer.elevation)
+  return [0, highest]
+}
 
 // ---------------------------------------------------------------------------
 // Zoom feel — THE dials. Tune here, nowhere else.
@@ -155,7 +165,7 @@ export function createCameraController(
         viewHeight: height,
         worldMin: Vec2.zero,
         worldMax: Vec2.make(worldW, worldH),
-        zRange: Z_RANGE,
+        zRange: fitZRange(doc),
         projection: stack.projection,
       })
       stack.setCamera(camera)

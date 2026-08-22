@@ -12,11 +12,13 @@
  */
 
 import type { World } from '@engine/core'
+import { createWorld, spawn } from '@engine/core'
 import { Vec2 } from '@engine/math'
-import { createTopDown, createTransformStack, fitCamera } from '@engine/projection'
+import { createIso, createTopDown, createTransformStack, fitCamera } from '@engine/projection'
 import { createNullBackend } from '@engine/renderer'
 import type { RasterFactory } from '@engine/tilemap'
 import { describe, expect, it } from 'vitest'
+import { PIP_FIGURINE } from '../src/editor/figurine'
 import { createSceneRenderer } from '../src/editor/render'
 import type { RenderUi } from '../src/editor/render'
 import { createStarterWorld } from '../src/editor/starter'
@@ -263,5 +265,96 @@ describe('createSceneRenderer', () => {
     renderer.reset() // loadWorld's move: layer objects are about to be strangers
     renderer.render(createNullBackend(), swapped, stack, SIZE, BASE_UI)
     expect(calls()).toBe(2)
+  })
+
+  describe('figurine markers', () => {
+    /** A bare world holding exactly one pip entity — no tile layers, so
+     * every polyline in the frame belongs to the figurine (compass arrows
+     * and the marker label are the only other commands, and neither is a
+     * fill-only polyline). */
+    function worldWithPip(): World {
+      const doc = createWorld({ settings: { tileSize: 1 } })
+      spawn(doc, {
+        name: 'pip',
+        components: {
+          position: { x: 1.5, y: 1.5 },
+          elevation: { z: 0 },
+          marker: { kind: 'pip' },
+          figurine: PIP_FIGURINE,
+        },
+      })
+      return doc
+    }
+
+    it('an entity carrying a valid figurine draws as a voxel miniature — no dot, label kept', () => {
+      const doc = worldWithPip()
+      const stack = createTransformStack(createIso())
+      stack.setCamera(
+        fitCamera({
+          viewWidth: SIZE.width,
+          viewHeight: SIZE.height,
+          worldMin: Vec2.zero,
+          worldMax: Vec2.make(2, 2),
+          zRange: [0, 1],
+          projection: stack.projection,
+        }),
+      )
+      const { raster } = countingRaster()
+      const renderer = createSceneRenderer({ raster })
+      const backend = createNullBackend()
+      renderer.render(backend, doc, stack, SIZE, { ...BASE_UI, activeLayerId: null })
+
+      const commands = frame(backend.frames)
+      // No dot: a figurine entity never falls through to drawCircle.
+      expect(commands.some((cmd) => cmd.kind === 'circle')).toBe(false)
+      // The label still draws, exactly as an ordinary marker's would.
+      expect(commands.some((cmd) => cmd.kind === 'text' && cmd.text === 'pip')).toBe(true)
+
+      // Every filled, unstroked polyline is one voxel face — the SAME
+      // "filled quad, no stroke" command @engine/tilemap's per-tile path
+      // uses (render.ts's drawFigurine reuses it deliberately). Pip's
+      // eighteen slices (~2,400 blocks), with hidden-face culling, come to
+      // exactly this many visible faces — well under the size-capped worst
+      // case, which is the cap's whole point.
+      const quads = commands.filter(
+        (cmd) => cmd.kind === 'polyline' && cmd.fill !== undefined && cmd.stroke === undefined,
+      )
+      expect(quads).toHaveLength(932)
+      // Spot-check one real color: bear brown, PIP_FIGURINE's first palette
+      // entry's top face — proof the palette (not a placeholder) painted it.
+      expect(quads.some((cmd) => cmd.fill === PIP_FIGURINE.palette[0]?.top)).toBe(true)
+    })
+
+    it('a malformed figurine component falls back to the ordinary dot, believing nothing', () => {
+      const doc = createWorld({ settings: { tileSize: 1 } })
+      spawn(doc, {
+        name: 'broken pip',
+        components: {
+          position: { x: 1.5, y: 1.5 },
+          marker: { kind: 'pip' },
+          figurine: { size: 'not a number' }, // shape-check must reject this
+        },
+      })
+      const stack = createTransformStack(createTopDown())
+      stack.setCamera(
+        fitCamera({
+          viewWidth: SIZE.width,
+          viewHeight: SIZE.height,
+          worldMin: Vec2.zero,
+          worldMax: Vec2.make(3, 3),
+          zRange: [0, 1],
+          projection: stack.projection,
+        }),
+      )
+      const { raster } = countingRaster()
+      const renderer = createSceneRenderer({ raster })
+      const backend = createNullBackend()
+      renderer.render(backend, doc, stack, SIZE, { ...BASE_UI, activeLayerId: null })
+
+      const commands = frame(backend.frames)
+      const dot = commands.find((cmd) => cmd.kind === 'circle')
+      expect(dot).toBeDefined()
+      expect(dot?.fill).toBe('#a97a50') // MARKER_COLORS.pip — even the fallback dot IS Pip-colored
+    })
   })
 })

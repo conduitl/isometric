@@ -5,12 +5,15 @@
  * against both friendly and hostile storage.
  */
 
+import type { World } from '@engine/core'
+import { createWorld } from '@engine/core'
 import { createRng, Vec2 } from '@engine/math'
 import { createTopDown, createTransformStack } from '@engine/projection'
+import { createTileLayer } from '@engine/tilemap'
 import type { SlotStorage } from '@engine/world-format'
 import { serializeWorld } from '@engine/world-format'
 import { describe, expect, it, vi } from 'vitest'
-import { createCameraController } from '../src/editor/camera'
+import { createCameraController, fitZRange } from '../src/editor/camera'
 import { createFastChannel } from '../src/editor/fast'
 import { bootDoc, exportDoc, importDoc, restoreBackupDoc, saveDoc } from '../src/editor/persistence'
 import { createStarterWorld } from '../src/editor/starter'
@@ -33,6 +36,15 @@ function makeCamera() {
   const controller = createCameraController(stack, () => VIEW)
   controller.fit(createStarterWorld())
   return { stack, controller }
+}
+
+/** A world with one layer elevated to `elevation` — just enough shape for
+ * fitZRange, which only reads each layer's elevation (plus settings.tileSize
+ * and width/height for the unrelated ground-footprint fit). */
+function worldWithElevation(elevation: number): World {
+  const doc = createWorld()
+  doc.layers.push(createTileLayer({ id: 'z', width: 4, height: 4, elevation, tilesetId: 'none' }))
+  return doc
 }
 
 describe('camera controller', () => {
@@ -96,6 +108,28 @@ describe('camera controller', () => {
   })
 })
 
+describe('fitZRange', () => {
+  it('the starter world (every layer at elevation 0) fits the [0, 2] floor', () => {
+    expect(fitZRange(createStarterWorld())).toEqual([0, 2])
+  })
+
+  it('a layer elevated to z = 10 raises the ceiling to match — a 10-slice figure fits whole', () => {
+    expect(fitZRange(worldWithElevation(10))).toEqual([0, 10])
+  })
+
+  it('the floor of 2 holds for a layer barely above ground', () => {
+    expect(fitZRange(worldWithElevation(1))).toEqual([0, 2])
+  })
+
+  it('the tallest layer decides, not the last one', () => {
+    const doc = createWorld()
+    doc.layers.push(createTileLayer({ id: 'low', width: 4, height: 4, elevation: 3, tilesetId: 'none' }))
+    doc.layers.push(createTileLayer({ id: 'high', width: 4, height: 4, elevation: 7, tilesetId: 'none' }))
+    doc.layers.push(createTileLayer({ id: 'mid', width: 4, height: 4, elevation: 5, tilesetId: 'none' }))
+    expect(fitZRange(doc)).toEqual([0, 7])
+  })
+})
+
 describe('fast channel', () => {
   const readout: CursorReadout = { world: { x: 1, y: 2 }, tile: { tx: 1, ty: 2 }, zoom: 1 }
 
@@ -136,8 +170,8 @@ describe('store builders', () => {
     expect(createEditorStore().getState()).toBe(EMPTY_SNAPSHOT)
   })
 
-  it('MARKER_KINDS is the placer trio', () => {
-    expect(MARKER_KINDS).toEqual(['player', 'crate', 'tree'])
+  it('MARKER_KINDS is the placer trio plus the built-in figurine', () => {
+    expect(MARKER_KINDS).toEqual(['player', 'crate', 'tree', 'pip'])
   })
 
   it('paletteFromDoc: eraser in slot 0, then the active tileset in order', () => {

@@ -49,6 +49,8 @@ import type { RendererBackend } from '@engine/renderer'
 import { createLayerRenderer, PROFILE_SLAB_HEIGHT } from '@engine/tilemap'
 import type { LayerRenderer, RasterFactory } from '@engine/tilemap'
 import type { LensOverlaySpec } from '@engine/tutorial'
+import { figurineCellAt, readFigurine } from './figurine'
+import type { Figurine } from './figurine'
 import { entityWorldPoint, markerKind } from './picking'
 import type { PickedTile, Selection } from './types'
 
@@ -64,11 +66,14 @@ const LABEL_COLOR = '#e4eaf4'
 const LABEL_FONT = '11px ui-monospace, monospace'
 
 /** Marker fills by kind (from views.ts); anything unrecognized gets the
- * neutral fallback. */
+ * neutral fallback. 'pip' draws as a voxel miniature (see drawFigurine) and
+ * only ever falls back to this dot color if its figurine component fails
+ * its shape check — the same bear-brown a healthy Pip renders in anyway. */
 const MARKER_COLORS: Record<string, string> = {
   player: '#ffd166',
   crate: '#ff8a3d',
   tree: '#4ade80',
+  pip: '#a97a50',
 }
 const MARKER_FALLBACK = '#e4eaf4'
 
@@ -235,18 +240,126 @@ export function createSceneRenderer(opts: { raster: RasterFactory }): SceneRende
     return renderer
   }
 
-  /** One marker: a filled dot at the entity's projected point, name above. */
-  function drawMarker(backend: RendererBackend, stack: TransformStack, entity: Entity, point: WorldPoint): void {
-    const s = stack.worldToScreen(point)
-    const kind = markerKind(entity)
-    backend.drawCircle({
-      x: s.x,
-      y: s.y,
-      radius: MARKER_RADIUS,
-      fill: (kind !== null ? MARKER_COLORS[kind] : undefined) ?? MARKER_FALLBACK,
-      stroke: MARKER_EDGE,
-      lineWidth: 1.5,
+  /**
+   * One figurine, drawn as a scaled voxel miniature filling the entity's own
+   * CELL (`floor(position)`, ground-axis units) rather than centered on the
+   * marker point — the same "cell owns the square from tx to tx+1" habit
+   * `placer.ts` uses when it PLACES an entity, mirrored here at draw time.
+   * Each voxel is `tileSize / figurine.size` world units on a side; a
+   * voxel's SLICE gives its z span directly (`slice.base/size` ..
+   * `slice.top/size` — elevation is never scaled by tileSize, the same rule
+   * @engine/tilemap's layer renderer follows for `layer.elevation`).
+   *
+   * Three faces per solid voxel — top, south (y-min), east (x-max) — each
+   * SKIPPED when the neighbor that would hide it is filled: the same-slice
+   * neighbor for south/east, the slice ABOVE for top (nothing above the
+   * figure's own top slice, so its top always draws). That hidden-face
+   * culling is exactly @engine/tilemap's `paintIso` wall rule, one dimension
+   * further in; painting the slices bottom-to-top and, within a slice,
+   * ascending `vx − vy` (`paintIso`'s own diagonal walk) keeps every face
+   * honestly covered by whatever stands nearer the camera. The whole
+   * figurine still occupies the caller's ONE depth key — this order is
+   * local to the miniature, not the outer painters queue.
+   */
+  function drawFigurine(
+    backend: RendererBackend,
+    stack: TransformStack,
+    tileSize: number,
+    figurine: Figurine,
+    point: WorldPoint,
+  ): void {
+    const size = figurine.size
+    const voxel = tileSize / size
+    const ex = Math.floor(point.x / tileSize) * tileSize
+    const ey = Math.floor(point.y / tileSize) * tileSize
+
+    const emitQuad = (color: string, corners: readonly WorldPoint[]): void => {
+      backend.drawPolyline({ points: corners.map((corner) => stack.worldToScreen(corner)), fill: color })
+    }
+
+    figurine.slices.forEach((slice, sliceIndex) => {
+      // The whole miniature rides at the ENTITY's elevation: a pip standing
+      // on a plateau stands ON the plateau, exactly where its label, its
+      // depth key, and the dot fallback already said it was.
+      const zTop = point.z + slice.top / size
+      const zBase = point.z + slice.base / size
+      // The slab above, for top-face culling — but only when it actually
+      // TOUCHES this one (readFigurine guarantees order and non-overlap,
+      // not adjacency): a voxel under an air gap keeps its lid.
+      const next = figurine.slices[sliceIndex + 1]
+      const above = next !== undefined && next.base === slice.top ? next : undefined
+
+      for (let diagonal = -(size - 1); diagonal <= size - 1; diagonal += 1) {
+        const vxFirst = Math.max(0, diagonal)
+        const vxLast = Math.min(size - 1, size - 1 + diagonal)
+        for (let vx = vxFirst; vx <= vxLast; vx += 1) {
+          const vy = vx - diagonal
+          const value = figurineCellAt(slice, size, vx, vy)
+          if (value === 0) continue
+          const swatch = figurine.palette[value - 1]
+          if (swatch === undefined) continue
+
+          const x0 = ex + vx * voxel
+          const x1 = ex + (vx + 1) * voxel
+          const y0 = ey + vy * voxel
+          const y1 = ey + (vy + 1) * voxel
+
+          if (figurineCellAt(slice, size, vx, vy - 1) === 0) {
+            emitQuad(swatch.left, [
+              { x: x0, y: y0, z: zTop },
+              { x: x1, y: y0, z: zTop },
+              { x: x1, y: y0, z: zBase },
+              { x: x0, y: y0, z: zBase },
+            ])
+          }
+          if (figurineCellAt(slice, size, vx + 1, vy) === 0) {
+            emitQuad(swatch.right, [
+              { x: x1, y: y0, z: zTop },
+              { x: x1, y: y1, z: zTop },
+              { x: x1, y: y1, z: zBase },
+              { x: x1, y: y0, z: zBase },
+            ])
+          }
+          if (above === undefined || figurineCellAt(above, size, vx, vy) === 0) {
+            emitQuad(swatch.top, [
+              { x: x0, y: y0, z: zTop },
+              { x: x1, y: y0, z: zTop },
+              { x: x1, y: y1, z: zTop },
+              { x: x0, y: y1, z: zTop },
+            ])
+          }
+        }
+      }
     })
+  }
+
+  /** One marker: a filled dot (or, for an entity carrying a valid `figurine`
+   * component, a voxel miniature — drawFigurine above) at the entity's
+   * projected point, name above either way. */
+  function drawMarker(
+    backend: RendererBackend,
+    stack: TransformStack,
+    tileSize: number,
+    entity: Entity,
+    point: WorldPoint,
+  ): void {
+    const s = stack.worldToScreen(point)
+    // Believe nothing (picking.ts's own rule): a hand-edited or malformed
+    // `figurine` component draws as the ordinary dot instead of throwing.
+    const figurine = readFigurine(entity)
+    if (figurine !== null) {
+      drawFigurine(backend, stack, tileSize, figurine, point)
+    } else {
+      const kind = markerKind(entity)
+      backend.drawCircle({
+        x: s.x,
+        y: s.y,
+        radius: MARKER_RADIUS,
+        fill: (kind !== null ? MARKER_COLORS[kind] : undefined) ?? MARKER_FALLBACK,
+        stroke: MARKER_EDGE,
+        lineWidth: 1.5,
+      })
+    }
     backend.drawText({
       x: s.x,
       y: s.y - MARKER_RADIUS - 5,
@@ -385,7 +498,7 @@ export function createSceneRenderer(opts: { raster: RasterFactory }): SceneRende
         queue.push({
           id,
           depth: projection.depth(point, bandAbove(doc, point.z)),
-          paint: () => drawMarker(backend, stack, entity, point),
+          paint: () => drawMarker(backend, stack, tileSize, entity, point),
         })
       }
       for (const item of paintersOrder(queue)) item.paint()

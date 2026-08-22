@@ -228,6 +228,13 @@ export function evaluateWorldPredicate(doc: World, predicate: StepPredicate): bo
  * (tx, ty), the same floor-toward-negative-infinity convention entity-at
  * uses ((-0.5, 2) stands on cell (-1, 2)). It ANDs with `where`: every
  * named field must hit AND the drop must land in the cell.
+ *
+ * `atCell` — legal only on builder.tile-painted (validateLessons enforces
+ * it; this matcher fails safe for any other event) — names a cell that must
+ * be AMONG the gesture's painted `cells`: matches when some entry has
+ * tx/ty strictly equal to (tx, ty). No flooring — painted cells are already
+ * whole-numbered cells, not sub-cell positions. It ANDs with `where`, same
+ * as `toCell`.
  */
 export function matchEventPredicate(event: BuilderEvent, predicate: EventPredicate): boolean {
   const resolved = resolveBuilderEventType(predicate.type)
@@ -239,6 +246,23 @@ export function matchEventPredicate(event: BuilderEvent, predicate: EventPredica
     if (event.type !== 'builder.entity-moved') return false
     if (Math.floor(event.to.x) !== predicate.toCell.tx) return false
     if (Math.floor(event.to.y) !== predicate.toCell.ty) return false
+  }
+  if (predicate.atCell !== undefined) {
+    // Only a paint gesture HAS painted cells. Any other event carrying this
+    // predicate never matches, for the same fail-safe reason as toCell.
+    if (event.type !== 'builder.tile-painted') return false
+    const cells: unknown = event.cells
+    if (!Array.isArray(cells)) return false
+    const { tx, ty } = predicate.atCell
+    // Cell entries are believed only after checking (same discipline as
+    // groundPositionOf/markerKindOf above): an entry that is not a
+    // { tx, ty } object simply never hits.
+    const hit = cells.some((entry) => {
+      if (entry === null || typeof entry !== 'object') return false
+      const candidate = entry as { tx?: unknown; ty?: unknown }
+      return candidate.tx === tx && candidate.ty === ty
+    })
+    if (!hit) return false
   }
   if (predicate.where === undefined) return true
   const payload = event as unknown as Record<string, unknown>

@@ -197,6 +197,15 @@ describe('validateLessons: step-level rules', () => {
       expect.stringContaining('marker must be a non-empty string'),
     )
   })
+
+  it('accepts an integer z on a cell target, and flags a non-finite one', () => {
+    const raised: StepTarget = { kind: 'cell', tx: 2, ty: 3, z: 4 }
+    expect(validateLessons([oneStep({ target: raised })])).toEqual([])
+    const badZ: StepTarget = { kind: 'cell', tx: 2, ty: 3, z: Number.NaN }
+    expect(texts(validateLessons([oneStep({ target: badZ })]))).toContainEqual(
+      expect.stringContaining('z must be a finite number'),
+    )
+  })
 })
 
 describe('validateLessons: effects and overlays', () => {
@@ -239,6 +248,18 @@ describe('validateLessons: effects and overlays', () => {
     const badEntity: StepEffect = { kind: 'show-overlays', overlays: [{ kind: 'entity-highlight', marker: '' }] }
     expect(texts(validateLessons([oneStep({ onEnter: [badEntity] })]))).toContainEqual(
       expect.stringContaining('marker must be a non-empty string'),
+    )
+  })
+
+  it('accepts an integer z on cell-highlight, and flags a non-finite one', () => {
+    const raised: StepEffect = { kind: 'show-overlays', overlays: [{ kind: 'cell-highlight', tx: 2, ty: 3, z: 4 }] }
+    expect(validateLessons([oneStep({ onEnter: [raised] })])).toEqual([])
+    const badZ: StepEffect = {
+      kind: 'show-overlays',
+      overlays: [{ kind: 'cell-highlight', tx: 2, ty: 3, z: Number.POSITIVE_INFINITY }],
+    }
+    expect(texts(validateLessons([oneStep({ onEnter: [badZ] })]))).toContainEqual(
+      expect.stringContaining('z must be a finite number'),
     )
   })
 })
@@ -330,6 +351,28 @@ describe('validateLessons: completion predicates', () => {
       completionOf({ kind: 'event', type: 'builder.entity-moved', toCell: { tx: 1.5, ty: 0 } }),
     ])
     expect(texts(problems)).toContainEqual(expect.stringContaining('toCell.tx/ty must be integers'))
+  })
+
+  it('accepts atCell on builder.tile-painted with whole-numbered coordinates', () => {
+    expect(
+      validateLessons([completionOf({ kind: 'event', type: 'builder.tile-painted', atCell: { tx: 3, ty: -2 } })]),
+    ).toEqual([])
+  })
+
+  it('rejects atCell on any event other than builder.tile-painted — only a paint gesture has painted cells', () => {
+    const problems = validateLessons([
+      completionOf({ kind: 'event', type: 'builder.entity-moved', atCell: { tx: 1, ty: 1 } }),
+    ])
+    expect(texts(problems)).toContainEqual(
+      expect.stringContaining('atCell is only legal on builder.tile-painted'),
+    )
+  })
+
+  it('rejects fractional atCell coordinates (cells are whole-numbered)', () => {
+    const problems = validateLessons([
+      completionOf({ kind: 'event', type: 'builder.tile-painted', atCell: { tx: 1.5, ty: 0 } }),
+    ])
+    expect(texts(problems)).toContainEqual(expect.stringContaining('atCell.tx/ty must be integers'))
   })
 
   it('tile-at needs integer coordinates and a sane tile value', () => {

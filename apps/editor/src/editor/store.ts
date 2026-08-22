@@ -26,10 +26,14 @@ import type { EditorSnapshot, PaletteTile, Selection, SelectionInfo } from './ty
 /**
  * The marker kinds the entity placer offers this phase. A short, fixed list
  * on purpose: three recognizable things a first world plausibly wants, each
- * with its own marker color in the renderer. Custom markers arrive with
- * later tiers; the palette stays honest until then.
+ * with its own marker color in the renderer — plus 'pip', the one built-in
+ * FIGURINE (figurine.ts): placing it spawns the same marker/position/
+ * elevation trio as every other kind, with one extra component
+ * (`figurine: PIP_FIGURINE`, attached in commands/entity-commands.ts) that
+ * makes the renderer draw a voxel miniature instead of a dot. Custom markers
+ * arrive with later tiers; the palette stays honest until then.
  */
-export const MARKER_KINDS: ReadonlyArray<string> = ['player', 'crate', 'tree']
+export const MARKER_KINDS: ReadonlyArray<string> = ['player', 'crate', 'tree', 'pip']
 
 /** The eraser's swatch — the viewport background family, because erasing
  * paints "nothing" and the button should look like what it does. */

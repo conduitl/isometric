@@ -50,6 +50,10 @@
  *   composition. An event is a moment and a composition is a state of the
  *   world; "all of [a moment, a fact]" cannot be honestly waited on, so the
  *   validator rejects it. Compose world facts; gate on single events.
+ * - **`atCell`** on an event predicate ({@link StepPredicate}): legal only on
+ *   `builder.tile-painted`, it matches when one of the gesture's painted
+ *   cells is exactly (tx, ty) — the pre-satisfaction-proof way to say "paint
+ *   it HERE", mirroring `toCell` on `builder.entity-moved`.
  *
  * ## Event granularity, in one breath
  *

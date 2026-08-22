@@ -169,13 +169,15 @@ function drawLabel(
 }
 
 /**
- * The cell's GROUND outline — four corners at z 0, tileSize from the doc's
- * settings, projected and closed. (Corner walk copied from the editor's
- * `tileOutline` in apps/editor/src/editor/render.ts, ground branch: the same
- * four corners that top-down turns into a square and iso into a 2:1 diamond —
- * that this code cannot tell which IS the lesson.) The optional label sits
- * above the outline in screen space: centered on the corners' centroid,
- * lifted past their topmost projected point.
+ * The cell's outline at its ELEVATION — four corners at `spec.z ?? 0`
+ * (default the ground), tileSize from the doc's settings, projected and
+ * closed. (Corner walk copied from the editor's `tileOutline` in
+ * apps/editor/src/editor/render.ts, ground branch: the same four corners
+ * that top-down turns into a square and iso into a 2:1 diamond — that this
+ * code cannot tell which IS the lesson.) A raised `z` rings the top face of
+ * a slab or a voxel slice, not a phantom outline on the floor beneath it.
+ * The optional label sits above the outline in screen space: centered on
+ * the corners' centroid, lifted past their topmost projected point.
  */
 function drawCellHighlight(
   backend: RendererBackend,
@@ -187,11 +189,12 @@ function drawCellHighlight(
   const x1 = (spec.tx + 1) * tileSize
   const y0 = spec.ty * tileSize
   const y1 = (spec.ty + 1) * tileSize
+  const z = spec.z ?? 0
   const corners: WorldPoint[] = [
-    { x: x0, y: y0, z: 0 },
-    { x: x1, y: y0, z: 0 },
-    { x: x1, y: y1, z: 0 },
-    { x: x0, y: y1, z: 0 },
+    { x: x0, y: y0, z },
+    { x: x1, y: y0, z },
+    { x: x1, y: y1, z },
+    { x: x0, y: y1, z },
   ]
   const points = corners.map((corner) => stack.worldToScreen(corner))
   backend.drawPolyline({ points, stroke: ACCENT, lineWidth: STROKE_WIDTH, closed: true })

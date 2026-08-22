@@ -122,6 +122,33 @@ export interface TileLayer {
   width: number
   height: number
   elevation: number
+  /**
+   * The slab's bottom — OPTIONAL, and additive: everything that reads a
+   * TileLayer worked before this field existed and keeps working unchanged
+   * when it is absent. Two readings of one layer:
+   *
+   * - **Absent** (today's behavior, bit for bit): the layer is a PLATEAU —
+   *   solid from `elevation` all the way down to the ground. Iso walls drop
+   *   from the top face to z = 0; profile draws a thin plate resting ON
+   *   `elevation` (@engine/tilemap's PROFILE_SLAB_HEIGHT tall).
+   * - **Present**: the layer is a SLAB — solid from `base` up to
+   *   `elevation` only. Iso walls drop `elevation → base` instead of to 0;
+   *   profile draws the full slab `[base, elevation]` edge-on. Must be
+   *   strictly less than `elevation` (a slab needs positive height) —
+   *   @engine/world-format's schema is what enforces that on load.
+   *
+   * Why this matters: a raised layer's iso walls, left rooted at 0, paint
+   * straight through anything BELOW them. That is invisible for a single
+   * plateau (nothing to paint through) but wrong for a STACK of layers —
+   * picture a character built from ten z-slices, each one tile tall. The
+   * top slice's walls would run all the way down through the nine slices
+   * beneath it, and in profile the whole stack would read as venetian
+   * blinds (nine thin plates with gaps, not a solid column). `base` fixes
+   * both: give slice z its own `base: z − 1` and each slab owns exactly the
+   * one unit of height it should. A plateau is simply a slab rooted at the
+   * ground (`base: 0`) — the same idea, one special case.
+   */
+  base?: number
   layerBand: number
   tilesetId: string
   cells: Uint16Array

@@ -61,12 +61,18 @@ export type StepPredicate =
    * `toCell` matches when the event's `to` position FLOORS to (tx, ty).
    * A moment-gate that names a destination can never be pre-satisfied by
    * something already standing there — the pre-satisfaction-proof way to
-   * say "move it HERE" (a lesson-02 lesson learned). */
+   * say "move it HERE" (a lesson-02 lesson learned). Symmetrically, for
+   * builder.tile-painted only, `atCell` matches when one of the gesture's
+   * painted `cells` is exactly (tx, ty) — a fixture lesson can only gate on
+   * events, and a bare tile match would complete on ANY cell, so `atCell`
+   * is the pre-satisfaction-proof way to say "paint it HERE". Whole-cell
+   * integers, no flooring needed: painted cells are already cells. */
   | {
       readonly kind: 'event'
       readonly type: BuilderEventType | string
       readonly where?: EventFieldMatch
       readonly toCell?: { readonly tx: number; readonly ty: number }
+      readonly atCell?: { readonly tx: number; readonly ty: number }
     }
   /** The named cell holds a tile (any non-empty if `tile` is omitted). */
   | {
@@ -111,7 +117,11 @@ export type OverlayPoint =
   | { readonly marker: string }
 
 export type LensOverlaySpec =
-  | { readonly kind: 'cell-highlight'; readonly tx: number; readonly ty: number; readonly label?: string }
+  /** `z` is the cell's ELEVATION — the world height the ring is drawn at
+   * (default 0, the ground). A step whose target sits atop a raised slab or
+   * a voxel slice highlights that storey, not a phantom ring on the floor
+   * beneath it. */
+  | { readonly kind: 'cell-highlight'; readonly tx: number; readonly ty: number; readonly z?: number; readonly label?: string }
   | { readonly kind: 'entity-highlight'; readonly marker: string; readonly label?: string }
   | { readonly kind: 'arrow'; readonly from: OverlayPoint; readonly to: OverlayPoint; readonly label?: string }
   /** The legs-and-hypotenuse distance picture: dx east, dy north, the
@@ -141,7 +151,10 @@ export type StepEffect =
  * highlighted by the lens layer. */
 export type StepTarget =
   | { readonly kind: 'anchor'; readonly anchor: string }
-  | { readonly kind: 'cell'; readonly tx: number; readonly ty: number }
+  /** `z` is the cell's ELEVATION — where the "show me" highlight ring is
+   * drawn (default 0, the ground); see {@link LensOverlaySpec}'s
+   * cell-highlight arm, which this target composes into. */
+  | { readonly kind: 'cell'; readonly tx: number; readonly ty: number; readonly z?: number }
   | { readonly kind: 'entity'; readonly marker: string }
 
 /**

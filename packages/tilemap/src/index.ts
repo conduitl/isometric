@@ -22,7 +22,7 @@ export type { CreateTileLayerOptions } from './layer'
 export { createOffscreenRasterFactory } from './raster'
 export type { RasterFactory, RasterTarget } from './raster'
 
-export { createLayerRenderer, PROFILE_SLAB_HEIGHT } from './render'
+export { createLayerRenderer, EAST_WALL_SHADE, PROFILE_SLAB_HEIGHT, shadeHex, SOUTH_WALL_SHADE } from './render'
 export type { LayerRenderer, LayerRendererOptions } from './render'
 
 export { tilemapPlugin } from './plugin'

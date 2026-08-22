@@ -298,7 +298,7 @@ export function LessonPane({
     // tour library can spotlight an entity (ARCHITECTURE §9).
     const highlight: LensOverlaySpec =
       target.kind === 'cell'
-        ? { kind: 'cell-highlight', tx: target.tx, ty: target.ty, label: 'here' }
+        ? { kind: 'cell-highlight', tx: target.tx, ty: target.ty, z: target.z, label: 'here' }
         : { kind: 'entity-highlight', marker: target.marker, label: 'this one' }
     session.setOverlays([...declaredOverlays(tutorial.lessonId, tutorial.stepId), highlight])
     composedRef.current = true

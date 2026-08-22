@@ -94,10 +94,32 @@ host.restoreParkedIfAny()
 
 const tutorial = createTutorialEngine(host, lessons)
 const storedProgress = host.progress.read()
-const resumeLesson =
-  storedProgress !== null && lessons.some((lesson) => lesson.id === storedProgress.lessonId)
-    ? storedProgress.lessonId
-    : lessons[0]?.id
+const storedLesson =
+  storedProgress !== null
+    ? lessons.find((lesson) => lesson.id === storedProgress.lessonId)
+    : undefined
+// Resume the stored lesson — unless it is FINISHED, in which case boot into
+// the NEXT lesson of the catalogue instead. Restarting a done lesson was
+// harmless while lessons ran on the student's own world, but a done FIXTURE
+// lesson re-staged at every boot would park the student's world and refuse
+// saves forever after — the curriculum marching forward is both the fix and
+// the better welcome. A finished FINAL lesson starts nothing at all: the
+// student boots into the library on their OWN world, which is the only
+// ending that never re-parks it (the same hazard, one lesson later).
+//
+// "Finished" is read the way the machine WRITES it — stepId omitted AND the
+// index past the end (machine.ts's commit) — never from the index alone: a
+// catalogue edit that shortens a lesson can leave a mid-lesson index at the
+// new length, and that student must resume by stepId, not march onward with
+// their place erased.
+const finished =
+  storedLesson !== undefined &&
+  storedProgress !== null &&
+  storedProgress.stepId === undefined &&
+  storedProgress.stepIndex >= storedLesson.steps.length
+const resumeLesson = finished
+  ? lessons[lessons.indexOf(storedLesson) + 1]?.id
+  : (storedLesson?.id ?? lessons[0]?.id)
 if (resumeLesson !== undefined) {
   tutorial.start(resumeLesson)
 }

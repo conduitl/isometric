@@ -75,6 +75,9 @@ function validateOverlay(overlay: LensOverlaySpec, path: string, flag: (problem:
       if (!Number.isInteger(overlay.tx) || !Number.isInteger(overlay.ty)) {
         flag(`${path}: tx/ty must be integers (cells are whole-numbered)`)
       }
+      if (overlay.z !== undefined && !Number.isFinite(overlay.z)) {
+        flag(`${path}: z must be a finite number`)
+      }
       return
     case 'entity-highlight':
       if (isBlank(overlay.marker)) flag(`${path}: marker must be a non-empty string`)
@@ -161,6 +164,9 @@ function validateTarget(target: StepTarget, flag: (problem: string) => void): vo
       if (!Number.isInteger(target.tx) || !Number.isInteger(target.ty)) {
         flag('target: tx/ty must be integers (cells are whole-numbered)')
       }
+      if (target.z !== undefined && !Number.isFinite(target.z)) {
+        flag('target: z must be a finite number')
+      }
       return
     case 'entity':
       if (isBlank(target.marker)) flag('target: marker must be a non-empty string')
@@ -222,6 +228,19 @@ function validatePredicate(
         }
         if (!Number.isInteger(predicate.toCell.tx) || !Number.isInteger(predicate.toCell.ty)) {
           flag(`${path}: toCell.tx/ty must be integers (cells are whole-numbered)`)
+        }
+      }
+      if (predicate.atCell !== undefined) {
+        // A painted cell only means something on a paint gesture — every
+        // other event carries no cells, and the matcher would fail-safe
+        // forever.
+        if (resolved !== null && resolved !== 'builder.tile-painted') {
+          flag(
+            `${path}: atCell is only legal on builder.tile-painted — "${resolved}" has no painted cells to match`,
+          )
+        }
+        if (!Number.isInteger(predicate.atCell.tx) || !Number.isInteger(predicate.atCell.ty)) {
+          flag(`${path}: atCell.tx/ty must be integers (cells are whole-numbered)`)
         }
       }
       return
@@ -315,7 +334,8 @@ function validateStep(step: LessonStep, flag: (problem: string) => void): void {
  * frozen vocabulary (aliases legal), `where` fields that the resolved
  * event's frozen payload actually carries (BUILDER_EVENT_PAYLOAD_FIELDS —
  * a typo'd field would silently never match), `toCell` only on
- * builder.entity-moved with whole-numbered coordinates, entity-distance
+ * builder.entity-moved with whole-numbered coordinates, `atCell` only on
+ * builder.tile-painted with whole-numbered coordinates, entity-distance
  * endpoints that are two DIFFERENT markers (the same marker twice measures
  * an entity against itself: always 0, never satisfiable), finite/sane
  * numbers, non-empty compositions with no event leaves inside them,

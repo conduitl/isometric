@@ -24,6 +24,7 @@ import type { Projection } from '@engine/projection'
 import { createCanvas2dBackend } from '@engine/renderer-canvas2d'
 import { createOffscreenRasterFactory } from '@engine/tilemap'
 import type { LensOverlaySpec, ViewProjectionName } from '@engine/tutorial'
+import { fitZRange } from '../camera'
 import { FIXTURES } from '../fixtures'
 import { createSceneRenderer } from '../render'
 import type { SceneSize } from '../render'
@@ -48,10 +49,6 @@ function projectionFor(name: ViewProjectionName): Projection {
       return createProfile()
   }
 }
-
-/** The camera's elevation headroom, same as the viewport's fit (camera.ts):
- * ground to two units up keeps plateaus and their tenants in frame. */
-const Z_RANGE = [0, 2] as const
 
 /**
  * Bind a scene figure to a canvas. Returns a draw function the owner calls
@@ -92,7 +89,7 @@ export function attachSceneFigure(
       viewHeight: size.height,
       worldMin: Vec2.zero,
       worldMax: Vec2.make(worldW, worldH),
-      zRange: Z_RANGE,
+      zRange: fitZRange(doc),
       projection,
     })
     const stack = createTransformStack(projection, camera)

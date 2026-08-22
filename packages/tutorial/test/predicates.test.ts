@@ -401,3 +401,80 @@ describe('matchEventPredicate: toCell', () => {
     expect(matchEventPredicate(moved, wrongCell)).toBe(false)
   })
 })
+
+describe('matchEventPredicate: atCell', () => {
+  // A drag-paint that changed three cells — atCell must find ANY one of
+  // them, not just the first or last.
+  const gesture: BuilderEvent = {
+    type: 'builder.tile-painted',
+    layerId: 'portrait',
+    tile: 1,
+    cells: [
+      { tx: 2, ty: 3 },
+      { tx: 5, ty: 9 },
+      { tx: 7, ty: 1 },
+    ],
+    toolId: 'brush',
+  }
+  const paintedAt = (tx: number, ty: number): EventPredicate => ({
+    kind: 'event',
+    type: 'builder.tile-painted',
+    atCell: { tx, ty },
+  })
+
+  it('hits when the named cell is among the gesture\'s painted cells — first, middle, or last', () => {
+    expect(matchEventPredicate(gesture, paintedAt(2, 3))).toBe(true)
+    expect(matchEventPredicate(gesture, paintedAt(5, 9))).toBe(true)
+    expect(matchEventPredicate(gesture, paintedAt(7, 1))).toBe(true)
+  })
+
+  it('misses a cell the gesture never touched — near is not in', () => {
+    expect(matchEventPredicate(gesture, paintedAt(2, 4))).toBe(false)
+    expect(matchEventPredicate(gesture, paintedAt(0, 0))).toBe(false)
+  })
+
+  it('never matches a non-painted event, even when the predicate type matches it — only a paint gesture HAS painted cells', () => {
+    // Validation forbids authoring atCell on anything but tile-painted; the
+    // matcher still fails safe when handed one.
+    const moved: BuilderEvent = {
+      type: 'builder.entity-moved',
+      id: 'e1',
+      from: { x: 0, y: 0, z: 0 },
+      to: { x: 2, y: 3, z: 0 },
+    }
+    const movedWithCell: EventPredicate = {
+      kind: 'event',
+      type: 'builder.entity-moved',
+      atCell: { tx: 1, ty: 1 },
+    }
+    expect(matchEventPredicate(moved, movedWithCell)).toBe(false)
+    // Control: the same predicate without atCell matches the same event.
+    expect(matchEventPredicate(moved, { kind: 'event', type: 'builder.entity-moved' })).toBe(true)
+    // And a type mismatch stays a mismatch, atCell or not.
+    expect(matchEventPredicate(saved, paintedAt(2, 3))).toBe(false)
+  })
+
+  it('fails safe on a malformed cells payload — an array of non-cell entries, or no array at all', () => {
+    const notAnArray = { ...gesture, cells: null } as unknown as BuilderEvent
+    expect(matchEventPredicate(notAnArray, paintedAt(2, 3))).toBe(false)
+    const garbageEntries = {
+      ...gesture,
+      cells: ['nope', { tx: '2', ty: 3 }, { tx: 2 }, null],
+    } as unknown as BuilderEvent
+    expect(matchEventPredicate(garbageEntries, paintedAt(2, 3))).toBe(false)
+  })
+
+  it('ANDs with where: both the named fields and the painted cell must hit', () => {
+    const both: EventPredicate = {
+      kind: 'event',
+      type: 'builder.tile-painted',
+      where: { tile: 1 },
+      atCell: { tx: 5, ty: 9 },
+    }
+    expect(matchEventPredicate(gesture, both)).toBe(true)
+    const wrongWhere: EventPredicate = { ...both, where: { tile: 2 } }
+    expect(matchEventPredicate(gesture, wrongWhere)).toBe(false)
+    const wrongCell: EventPredicate = { ...both, atCell: { tx: 0, ty: 0 } }
+    expect(matchEventPredicate(gesture, wrongCell)).toBe(false)
+  })
+})

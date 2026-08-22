@@ -135,6 +135,38 @@ describe('canonical serialization', () => {
   })
 })
 
+describe('layer.base — the slab field round-trips, and stays absent when never set', () => {
+  it('a based layer survives serialize ∘ parse ∘ serialize, and the key appears in the file', () => {
+    const world = tinyWorld()
+    world.layers = [
+      {
+        id: 'slice',
+        name: 'z = 3',
+        width: 2,
+        height: 1,
+        elevation: 3,
+        base: 2,
+        layerBand: 0,
+        tilesetId: 't',
+        cells: Uint16Array.from([1, 0]),
+      },
+    ]
+
+    const once = serializeWorld(world)
+    expect(once).toContain('"base": 2')
+    const { world: reloaded } = loaded(once)
+    expect(must(reloaded.layers[0]).base).toBe(2)
+    expect(serializeWorld(reloaded)).toBe(once)
+  })
+
+  it('an ordinary layer with no base writes no "base" key at all — the legacy pin', () => {
+    const text = serializeWorld(tinyWorld())
+    expect(text).not.toContain('"base"')
+    const { world } = loaded(text)
+    expect(must(world.layers[0]).base).toBeUndefined()
+  })
+})
+
 describe('the v0 migration — the runner exercised by a real step', () => {
   it('renames numeric ids, computes nextEntityId, and adds layerBand 0', () => {
     const { world } = loaded(fixture('v0-basic.world.json'))

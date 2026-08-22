@@ -27,7 +27,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { lessons } from '@content/lessons'
 import { BUILDER_EVENT_ALIASES } from '../src/editor/events/builder'
 import type { BuilderEvent, BuilderEventType } from '../src/editor/events/builder'
-import { createShowcaseIsland, FIXTURES } from '../src/editor/fixtures'
+import {
+  createBearFigure,
+  createBearFigureStart,
+  createBearPortrait,
+  createBearPortraitStart,
+  createShowcaseIsland,
+  FIXTURES,
+} from '../src/editor/fixtures'
 import { createEditorSession } from '../src/editor/session'
 import { createBrushTool, createPlacerTool, createSelectTool } from '../src/editor/tools'
 import { createEditorTutorialHost, PARKED_WORLD_KEY, TUTORIAL_PROGRESS_KEY } from '../src/editor/tutorial-host'
@@ -285,6 +292,192 @@ describe('the showcase island fixture', () => {
   it('the catalogue names the showcase island', () => {
     expect(Object.keys(FIXTURES)).toContain('showcase-island')
     expect(FIXTURES['showcase-island']).toBe(createShowcaseIsland)
+  })
+})
+
+// The bear portrait pair — the 'paint-by-numbers' lesson's finished picture
+// and its gapped start world (see fixtures.ts, "The bear portrait"). Pinned
+// exactly like the showcase island above: same-bytes determinism, a clean
+// world-format round trip, and catalogue membership — for BOTH ids, since
+// the two fixtures are independent documents built from a shared cell source
+// rather than one document with a flag.
+describe('the bear portrait fixture', () => {
+  it('is deterministic and round-trips the world format', () => {
+    const first = serializeWorld(createBearPortrait())
+    const second = serializeWorld(createBearPortrait())
+    expect(second).toBe(first) // same bytes on every call — no hidden clocks
+
+    const parsed = parseWorld(first)
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) {
+      expect(parsed.warnings).toEqual([])
+      expect(serializeWorld(parsed.world)).toBe(first)
+    }
+  })
+
+  it('the catalogue names the bear portrait', () => {
+    expect(Object.keys(FIXTURES)).toContain('bear-portrait')
+    expect(FIXTURES['bear-portrait']).toBe(createBearPortrait)
+  })
+})
+
+describe('the bear portrait start fixture', () => {
+  it('is deterministic and round-trips the world format', () => {
+    const first = serializeWorld(createBearPortraitStart())
+    const second = serializeWorld(createBearPortraitStart())
+    expect(second).toBe(first) // same bytes on every call — no hidden clocks
+
+    const parsed = parseWorld(first)
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) {
+      expect(parsed.warnings).toEqual([])
+      expect(serializeWorld(parsed.world)).toBe(first)
+    }
+  })
+
+  it('the catalogue names the bear portrait start', () => {
+    expect(Object.keys(FIXTURES)).toContain('bear-portrait-start')
+    expect(FIXTURES['bear-portrait-start']).toBe(createBearPortraitStart)
+  })
+})
+
+// The bear figure pair — the voxel sibling of the bear portrait above (see
+// fixtures.ts, "The bear figure (voxel)"): the same character built from ten
+// stacked z-slices instead of one flat picture. Pinned exactly like the
+// portrait pair: same-bytes determinism, a clean world-format round trip,
+// and catalogue membership — for BOTH ids.
+describe('the bear figure fixture', () => {
+  it('is deterministic and round-trips the world format', () => {
+    const first = serializeWorld(createBearFigure())
+    const second = serializeWorld(createBearFigure())
+    expect(second).toBe(first) // same bytes on every call — no hidden clocks
+
+    const parsed = parseWorld(first)
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) {
+      expect(parsed.warnings).toEqual([])
+      expect(serializeWorld(parsed.world)).toBe(first)
+    }
+  })
+
+  it('the catalogue names the bear figure', () => {
+    expect(Object.keys(FIXTURES)).toContain('bear-figure')
+    expect(FIXTURES['bear-figure']).toBe(createBearFigure)
+  })
+})
+
+describe('the bear figure start fixture', () => {
+  it('is deterministic and round-trips the world format', () => {
+    const first = serializeWorld(createBearFigureStart())
+    const second = serializeWorld(createBearFigureStart())
+    expect(second).toBe(first) // same bytes on every call — no hidden clocks
+
+    const parsed = parseWorld(first)
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) {
+      expect(parsed.warnings).toEqual([])
+      expect(serializeWorld(parsed.world)).toBe(first)
+    }
+  })
+
+  it('the catalogue names the bear figure start', () => {
+    expect(Object.keys(FIXTURES)).toContain('bear-figure-start')
+    expect(FIXTURES['bear-figure-start']).toBe(createBearFigureStart)
+  })
+})
+
+// The drift guard promised in the fixture pins above and in lesson 00's own
+// header: for every 'paint-by-numbers' step whose completion carries BOTH
+// atCell and where.tile, the named cell must be EMPTY (0) in
+// bear-portrait-start and hold EXACTLY that tile in the finished
+// bear-portrait. It lives here, app-side, rather than beside the lesson in
+// content/lessons/test — @content/lessons is a leaf package and may not
+// import the editor to check its own numbers, so the one package allowed to
+// see both the lesson data AND the fixtures checks them instead. A one-cell
+// slip in the art, the fixture, or the lesson now fails CI with the cell
+// named.
+describe('paint-by-numbers drift guard: lesson gates match the fixture pair, cell for cell', () => {
+  it('every atCell + where.tile completion is empty in the start world and painted in the finished one', () => {
+    const lesson = lessons.find((candidate) => candidate.id === 'paint-by-numbers')
+    expect(lesson, 'lesson "paint-by-numbers" is not shipped').toBeDefined()
+    if (lesson === undefined) return
+
+    const start = createBearPortraitStart()
+    const finished = createBearPortrait()
+    const startLayer = start.layers.find((layer) => layer.id === 'portrait')
+    const finishedLayer = finished.layers.find((layer) => layer.id === 'portrait')
+    if (startLayer === undefined || finishedLayer === undefined) {
+      throw new Error('the bear portrait fixtures lost their "portrait" layer')
+    }
+
+    let gatesChecked = 0
+    for (const step of lesson.steps) {
+      const completion = step.completion
+      if (completion.kind !== 'event' || completion.atCell === undefined) continue
+      const tile = completion.where?.['tile']
+      if (typeof tile !== 'number') continue
+      const { tx, ty } = completion.atCell
+      gatesChecked += 1
+      expect(
+        getCell(startLayer, tx, ty),
+        `${lesson.id}/${step.id}: (${tx}, ${ty}) is not empty in bear-portrait-start`,
+      ).toBe(0)
+      expect(
+        getCell(finishedLayer, tx, ty),
+        `${lesson.id}/${step.id}: (${tx}, ${ty}) does not hold tile ${tile} in bear-portrait`,
+      ).toBe(tile)
+    }
+    // The guard only means something if it ran against something real — a
+    // lesson refactor that quietly drops every atCell+where gate (or picks
+    // up a fifth) must fail loudly here rather than passing vacuously.
+    expect(gatesChecked).toBe(4)
+  })
+})
+
+// The voxel sibling of the drift guard above — promised in
+// lesson-01-the-third-number.ts's own header ("the drift guard that pins
+// both halves per cell lives app-side beside the fixture pins"). Same shape,
+// one twist: 'the-third-number' spends four DIFFERENT layers, one per slice
+// (z1/z11/z14/z18 — the slice IS the taught idea), where 'paint-by-numbers'
+// only ever checked the one 'portrait' layer. So each gate's own
+// where.layerId names which of 'bear-figure-start's ten slices to read,
+// instead of a single layer id shared by every check.
+describe('the-third-number drift guard: lesson gates match the figure fixture pair, slice and cell', () => {
+  it('every atCell + where.tile/layerId completion is empty in its start slice and painted in the finished one', () => {
+    const lesson = lessons.find((candidate) => candidate.id === 'the-third-number')
+    expect(lesson, 'lesson "the-third-number" is not shipped').toBeDefined()
+    if (lesson === undefined) return
+
+    const start = createBearFigureStart()
+    const finished = createBearFigure()
+
+    let gatesChecked = 0
+    for (const step of lesson.steps) {
+      const completion = step.completion
+      if (completion.kind !== 'event' || completion.atCell === undefined) continue
+      const tile = completion.where?.['tile']
+      const layerId = completion.where?.['layerId']
+      if (typeof tile !== 'number' || typeof layerId !== 'string') continue
+      const { tx, ty } = completion.atCell
+      const startLayer = start.layers.find((layer) => layer.id === layerId)
+      const finishedLayer = finished.layers.find((layer) => layer.id === layerId)
+      if (startLayer === undefined || finishedLayer === undefined) {
+        throw new Error(`the bear figure fixtures lost their "${layerId}" layer`)
+      }
+      gatesChecked += 1
+      expect(
+        getCell(startLayer, tx, ty),
+        `${lesson.id}/${step.id}: (${tx}, ${ty}) on ${layerId} is not empty in bear-figure-start`,
+      ).toBe(0)
+      expect(
+        getCell(finishedLayer, tx, ty),
+        `${lesson.id}/${step.id}: (${tx}, ${ty}) on ${layerId} does not hold tile ${tile} in bear-figure`,
+      ).toBe(tile)
+    }
+    // The guard only means something if it ran against something real — a
+    // lesson refactor that quietly drops every atCell+where gate (or picks
+    // up a fifth) must fail loudly here rather than passing vacuously.
+    expect(gatesChecked).toBe(4)
   })
 })
 

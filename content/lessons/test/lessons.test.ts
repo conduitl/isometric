@@ -35,7 +35,7 @@
 import { describe, expect, it } from 'vitest'
 import { validateLessons } from '@engine/tutorial'
 import type { StepPredicate, StepTarget } from '@engine/tutorial'
-import { lesson02, lessons } from '../src/index'
+import { lesson00, lesson02, lessons } from '../src/index'
 
 // ---------------------------------------------------------------------------
 // Starter-world facts (StarterWorld contract, apps/editor/src/editor/types.ts)
@@ -105,20 +105,26 @@ const LEGAL_ANCHORS: ReadonlySet<string> = new Set([
 // ---------------------------------------------------------------------------
 
 /** Every cell-addressed leaf in a predicate tree: tile-at, entity-at, and
- * an event predicate's `toCell` destination (the entity-moved moment-gate
- * names a cell too, and that cell must obey the same geography rules —
- * on the board, off the pond, off the player). all/any recursed — the
- * validator guarantees no event leaves hide in there, but cell-addressed
- * world leaves are legal. */
+ * an event predicate's `toCell` destination or `atCell` paint cell (both
+ * moment-gates name a cell too, and that cell must obey the same geography
+ * rules — on the board, off the pond, off the player). all/any recursed —
+ * the validator guarantees no event leaves hide in there, but
+ * cell-addressed world leaves are legal. */
 function cellLeaves(predicate: StepPredicate): Array<{ kind: string; tx: number; ty: number }> {
   switch (predicate.kind) {
     case 'tile-at':
     case 'entity-at':
       return [{ kind: predicate.kind, tx: predicate.tx, ty: predicate.ty }]
-    case 'event':
-      return predicate.toCell === undefined
-        ? []
-        : [{ kind: 'event-toCell', tx: predicate.toCell.tx, ty: predicate.toCell.ty }]
+    case 'event': {
+      const cells: Array<{ kind: string; tx: number; ty: number }> = []
+      if (predicate.toCell !== undefined) {
+        cells.push({ kind: 'event-toCell', tx: predicate.toCell.tx, ty: predicate.toCell.ty })
+      }
+      if (predicate.atCell !== undefined) {
+        cells.push({ kind: 'event-atCell', tx: predicate.atCell.tx, ty: predicate.atCell.ty })
+      }
+      return cells
+    }
     case 'all':
     case 'any':
       return predicate.of.flatMap(cellLeaves)
@@ -154,8 +160,18 @@ const starterSteps = lessons
   .flatMap((lesson) => lesson.steps.map((step) => ({ lesson, step })))
 
 describe('schema validity — the real validator, the one CI runs', () => {
-  it('ships the three v1 arcs', () => {
-    expect(lessons.map((lesson) => lesson.arc)).toEqual(['coordinates', 'distance', 'perspectives'])
+  it('ships the three v1 arcs, coordinates leading with three lessons', () => {
+    // Lesson 00 ('paint by numbers') and 'the-third-number' both lead lesson
+    // 01 in the 'coordinates' arc — still three ARCS, five lessons; the
+    // sequence gets two leading entries where curriculum order says the
+    // address-then-height lessons go first.
+    expect(lessons.map((lesson) => lesson.arc)).toEqual([
+      'coordinates',
+      'coordinates',
+      'coordinates',
+      'distance',
+      'perspectives',
+    ])
   })
 
   it('validateLessons finds no problems in any shipped lesson', () => {
@@ -282,6 +298,102 @@ describe('lesson 02 arithmetic — every distance claim recomputed', () => {
         previous.cell.tx === current.cell.tx && previous.cell.ty === current.cell.ty,
         `${current.stepId}: same cell as ${previous.stepId}`,
       ).toBe(false)
+    }
+  })
+})
+
+describe('lesson 00 arithmetic — the eye pair sits on one row', () => {
+  /** Pull an event completion's `atCell`, the way lesson 00's four gated
+   * paint steps address a cell — undefined for anything else (a bare
+   * predicate, or one gated by `where` alone). */
+  const atCellOf = (step: { completion: StepPredicate } | undefined): { tx: number; ty: number } | undefined =>
+    step?.completion.kind === 'event' ? step.completion.atCell : undefined
+
+  it('the two eye-paint completions share ty and differ only in tx — computed from the steps, not retyped', () => {
+    // The prose's whole claim ("(5, 8)" and "(10, 8)" sit at the same
+    // height, only the first number moved) is recomputed FROM the lesson's
+    // own completion data below, rather than copying the two addresses in
+    // as fresh literals a typo could drift away from unnoticed.
+    const firstEye = lesson00.steps.find((step) => step.id === 'the-first-eye')
+    const secondEye = lesson00.steps.find((step) => step.id === 'the-second-eye')
+    expect(firstEye, 'lesson 00 is missing step "the-first-eye"').toBeDefined()
+    expect(secondEye, 'lesson 00 is missing step "the-second-eye"').toBeDefined()
+
+    const firstCell = atCellOf(firstEye)
+    const secondCell = atCellOf(secondEye)
+    expect(firstCell, 'the-first-eye completion carries no atCell').toBeDefined()
+    expect(secondCell, 'the-second-eye completion carries no atCell').toBeDefined()
+    if (firstCell === undefined || secondCell === undefined) return
+
+    // Same height: y does not move between the two eyes…
+    expect(secondCell.ty).toBe(firstCell.ty)
+    // …and x does, strictly eastward (5 → 10, never sideways to itself).
+    expect(secondCell.tx).toBeGreaterThan(firstCell.tx)
+  })
+})
+
+describe('the-third-number arithmetic — every paint gate pins cell, tile, and slice', () => {
+  /** The four paint gates, in step order, restated independently of
+   * lesson-01-the-third-number.ts's own completion data — climbing the
+   * fixture floor to ceiling — so a slice, tile, or cell typo in EITHER copy
+   * fails loudly here instead of the two drifting together unnoticed. */
+  const gates = [
+    { stepId: 'the-ground-floor', cell: { tx: 6, ty: 2 }, tile: 2, layerId: 'z1' },
+    { stepId: 'eleven-slices-up', cell: { tx: 12, ty: 9 }, tile: 5, layerId: 'z11' },
+    { stepId: 'up-at-the-beak', cell: { tx: 13, ty: 7 }, tile: 3, layerId: 'z14' },
+    { stepId: 'the-very-top', cell: { tx: 12, ty: 13 }, tile: 5, layerId: 'z18' },
+  ] as const
+
+  const lessonThirdNumber = lessons.find((candidate) => candidate.id === 'the-third-number')
+
+  it('every gate completion matches its claimed cell, tile, and layerId exactly', () => {
+    expect(lessonThirdNumber, 'lesson "the-third-number" is not shipped').toBeDefined()
+    if (lessonThirdNumber === undefined) return
+    for (const gate of gates) {
+      const step = lessonThirdNumber.steps.find((candidate) => candidate.id === gate.stepId)
+      expect(step, `the-third-number is missing step "${gate.stepId}"`).toBeDefined()
+      expect(step?.completion).toEqual({
+        kind: 'event',
+        type: 'builder.tile-painted',
+        where: { tile: gate.tile, layerId: gate.layerId },
+        atCell: gate.cell,
+      })
+    }
+  })
+
+  it('a cell-kind target agrees with its own gate — same cell, and z recomputed from the layerId', () => {
+    // Steps 1, 3, and 4 target the cell itself (step 2 targets the Layers
+    // panel instead — the lesson's own header explains why); every cell
+    // target carries z, so it must name the same slice its completion's
+    // layerId gates on — the slice number is parsed OUT of layerId here,
+    // never retyped as a fresh literal.
+    expect(lessonThirdNumber, 'lesson "the-third-number" is not shipped').toBeDefined()
+    if (lessonThirdNumber === undefined) return
+    let cellTargetsChecked = 0
+    for (const gate of gates) {
+      const step = lessonThirdNumber.steps.find((candidate) => candidate.id === gate.stepId)
+      if (step?.target?.kind !== 'cell') continue
+      cellTargetsChecked += 1
+      const slice = Number(gate.layerId.slice(1))
+      expect(step.target.tx, `${gate.stepId}: target.tx`).toBe(gate.cell.tx)
+      expect(step.target.ty, `${gate.stepId}: target.ty`).toBe(gate.cell.ty)
+      expect(step.target.z, `${gate.stepId}: target.z should match layerId "${gate.layerId}"`).toBe(slice)
+    }
+    // Vacuous-pass guard, matching lesson 02's claims table above: exactly
+    // three of the four gates target their own cell (step 2 targets the
+    // panel), so a lesson edit that quietly drops a cell target must fail
+    // loudly here rather than checking nothing.
+    expect(cellTargetsChecked).toBe(3)
+  })
+
+  it('the slice climbs strictly upward across the four gates: z1 < z11 < z14 < z18', () => {
+    const slices = gates.map((gate) => Number(gate.layerId.slice(1)))
+    for (let i = 1; i < slices.length; i += 1) {
+      const previous = slices[i - 1]
+      const current = slices[i]
+      const currentStep = gates[i]?.stepId
+      const previousStep = gates[i - 1]?.stepId
+      expect(current, `${currentStep}: slice does not climb past ${previousStep}`).toBeGreaterThan(previous ?? -Infinity)
     }
   })
 })

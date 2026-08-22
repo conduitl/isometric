@@ -23,12 +23,26 @@
  * Keyboard-first, like keyboard-flow: lesson switching goes through the
  * LIBRARY (the lesson pane's list view — the old <select> picker retired
  * in the all-steps redesign) and is driven by Tab + Enter at least once
- * (the lesson-02 switch in the reset test: Tab to "All lessons", Enter,
- * Tab to the lesson's entry, Enter); the view buttons by Tab + Enter for
- * the whole three-views walk; pointer-free helpers are shared via
- * ./helpers.ts. Where the keyboard twin is already proved, later tests may
- * switch lessons by click (openLessonFromLibrary) — the semantics under
- * test are the engine's, not the list's, twice over.
+ * (the lesson-02 switch in the reset test, via helpers.ts's
+ * openLessonFromLibraryByKeyboard: Tab to "All lessons", Enter, Tab to the
+ * lesson's entry, Enter); the view buttons by Tab + Enter for the whole
+ * three-views walk; pointer-free helpers are shared via ./helpers.ts. Where
+ * the keyboard twin is already proved, later tests may switch lessons by
+ * click (openLessonFromLibrary, below) — the semantics under test are the
+ * engine's, not the list's, twice over.
+ *
+ * ## Fresh boot is 'Paint by numbers' now
+ *
+ * main.tsx's resume-aware start greets a fresh student with the catalogue's
+ * FIRST lesson — 'Paint by numbers' (id `paint-by-numbers`), which runs on
+ * the 'bear-portrait-start' fixture and parks whatever world was live. Most
+ * tests below are actually about 'First tiles' (id `first-tiles`, now
+ * SECOND): they open it from the library right after `bootFresh` —
+ * restarting a NON-fixture lesson restores the parked starter world first
+ * (LessonPane.openLesson), so the walkthroughs run unchanged once that
+ * navigation lands. Tests whose subject IS the fresh-boot default itself
+ * assert 'Paint by numbers' / step 1 of 6 / the fixture's own world name and
+ * entity cast (empty — a pixel-art character carries no entities) directly.
  *
  * retries: 0 (playwright.config.ts) — a flaky gate is a broken gate.
  */
@@ -45,6 +59,7 @@ import {
   expectAnnouncement,
   INSPECTOR,
   LESSON,
+  openLessonFromLibraryByKeyboard,
   SAVE_STATE,
   tabTo,
   THINGS_GROUP,
@@ -172,8 +187,13 @@ async function openLessonFromLibrary(page: Page, title: string): Promise<void> {
 test('resume survives reload: two completed steps land the rail on step 3, twice', async ({ page }) => {
   await bootFresh(page)
 
-  // Fresh boot: the catalogue's first lesson greets a fresh student, at the
-  // first step (main.tsx's resume-aware start with no stored progress).
+  // Fresh boot: the catalogue's actual first lesson greets a fresh student
+  // (main.tsx's resume-aware start with no stored progress) — but THIS
+  // test's subject is First tiles's own resume behavior, so it opens that
+  // lesson from the library, which restores the boot-parked starter world
+  // first (LessonPane.openLesson).
+  await expect(page.locator(`${LESSON} h2`)).toHaveText('Paint by numbers')
+  await openLessonFromLibrary(page, 'First tiles')
   await expect(page.locator(`${LESSON} h2`)).toHaveText('First tiles')
   await expect(page.locator(LESSON)).toContainText('step 1 of 5')
 
@@ -228,6 +248,9 @@ test('hints reveal in order, the button disables at zero, and revealed hints sur
   page,
 }) => {
   await bootFresh(page)
+  // This test is First tiles's own hint behavior; open it from the library
+  // (fresh boot now lands on 'Paint by numbers' first — main.tsx).
+  await openLessonFromLibrary(page, 'First tiles')
   await expect(page.locator(LESSON)).toContainText('step 1 of 5')
 
   const hintButton = page.locator(HINT_BUTTON)
@@ -268,18 +291,20 @@ test('hints reveal in order, the button disables at zero, and revealed hints sur
 
 test('start-over on an onEnter-overlay step collapses hints without rewinding', async ({ page }) => {
   await bootFresh(page)
-  await expect(page.locator(`${LESSON} h2`)).toHaveText('First tiles')
+  // Fresh boot lands on 'Paint by numbers' (a FIXTURE lesson) — switching
+  // straight to lesson-02 below exercises the fixture→non-fixture park
+  // restore too (host.restoreParkedIfAny, LessonPane.openLesson), on top of
+  // this test's own subject (reset on an onEnter-overlay step).
+  await expect(page.locator(`${LESSON} h2`)).toHaveText('Paint by numbers')
 
   // Switch to lesson-02 with the KEYBOARD: Tab to the "All lessons" back
   // control (the lesson pane's first stop on the ring), Enter into the
   // library — focus lands on the first lesson entry — then Tab to the
   // wanted entry and Enter to start it. This is the keyboard twin the old
   // <select> needed type-ahead for; the library needs nothing platform-
-  // specific, because every entry is a plain button on the tab ring.
-  await tabTo(page, { within: LESSON, text: 'All lessons' })
-  await page.keyboard.press('Enter')
-  await tabTo(page, { within: PICKER, text: 'The distance picture' })
-  await page.keyboard.press('Enter')
+  // specific, because every entry is a plain button on the tab ring. Shared
+  // with keyboard-flow via helpers.ts's openLessonFromLibraryByKeyboard.
+  await openLessonFromLibraryByKeyboard(page, 'The distance picture')
   await expect(page.locator(`${LESSON} h2`)).toHaveText('The distance picture')
   await expect(page.locator(LESSON)).toContainText('step 1 of 5')
   await expect(page.locator(LESSON)).toContainText('Three steps east')
@@ -328,6 +353,12 @@ test('three-views parks the world, refuses save, and Back-to-my-world restores i
 }) => {
   const entityRows = page.locator(`${ENTITIES_PANEL} ul button`)
   await bootFresh(page)
+
+  // Fresh boot opens 'Paint by numbers' on its own fixture — this test
+  // needs First tiles running on the STUDENT's starter world, so it opens
+  // that lesson from the library first (restoring the boot-parked starter
+  // before First tiles starts, LessonPane.openLesson).
+  await openLessonFromLibrary(page, 'First tiles')
 
   // Give the student's world a distinctive, UNSAVED mark first: water on
   // (12, 4). On fresh lesson-01 this single paint advances the rail to
@@ -436,6 +467,11 @@ test('reloading mid-fixture re-parks the student world and resumes on the island
   const entityRows = page.locator(`${ENTITIES_PANEL} ul button`)
   await bootFresh(page)
 
+  // Fresh boot opens 'Paint by numbers' on its own fixture — reach First
+  // tiles (which restores the boot-parked starter, LessonPane.openLesson)
+  // so the water mark below lands on the STUDENT's own world.
+  await openLessonFromLibrary(page, 'First tiles')
+
   // The student's own (unsaved) world gets its distinctive mark — water on
   // (12, 4) — so the park's CONTENT can be told apart from a plain starter
   // world below. This is what makes the boot cycle observable.
@@ -495,6 +531,10 @@ test('show-me spotlights the palette with click-through, toggles off, and hides 
   page,
 }) => {
   await bootFresh(page)
+  // This step's spotlight target is First tiles's own palette.tiles anchor
+  // (Paint by numbers' first step targets the brush instead) — open First
+  // tiles from the library before driving it.
+  await openLessonFromLibrary(page, 'First tiles')
   await expect(page.locator(LESSON)).toContainText('step 1 of 5')
 
   const panels = page.locator(SPOTLIGHT_PANELS)
@@ -577,8 +617,11 @@ test('axe-core scan: no serious/critical violations across four tutorial states'
   await bootFresh(page)
 
   // ---- State 1: the booted rail ----------------------------------------
-  await expect(page.locator(`${LESSON} h2`)).toHaveText('First tiles')
-  await expect(page.locator(ENTITIES_PANEL)).toContainText('player')
+  // Fresh boot now lands on 'Paint by numbers' on the bear-portrait fixture
+  // (main.tsx) — a pixel-art character carries no entities, so the panel
+  // shows its own empty state instead of 'player'.
+  await expect(page.locator(`${LESSON} h2`)).toHaveText('Paint by numbers')
+  await expect(page.locator(ENTITIES_PANEL)).toContainText('Nothing in the world yet')
   let severe = severeViolations(await new AxeBuilder({ page }).analyze(), 'booted-rail')
   expect(severe, `booted rail:\n${JSON.stringify(severe, null, 2)}`).toEqual([])
 

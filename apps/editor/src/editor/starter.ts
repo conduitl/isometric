@@ -22,7 +22,7 @@
 import type { TileDef, Tileset, World } from '@engine/core'
 import { createWorld, spawn } from '@engine/core'
 import { createRng } from '@engine/math'
-import { createTileLayer } from '@engine/tilemap'
+import { createTileLayer, EAST_WALL_SHADE, shadeHex, SOUTH_WALL_SHADE } from '@engine/tilemap'
 
 // Cell values are 1-based into the tileset (0 = empty) — the off-by-one
 // convention of @engine/core's Tileset, named here so the fill code reads.
@@ -30,36 +30,33 @@ const GRASS = 1
 const WATER = 2
 const SAND = 3
 
-/**
- * Darken a #rrggbb color by multiplying each channel — the same
- * cheapest-believable-shadow trick @engine/tilemap uses for iso walls,
- * applied at authoring time so the tileset CARRIES its shades instead of
- * relying on renderer fallbacks. All inputs here are our own literals, so no
- * defensive parsing: a bad literal is a build bug and shows up in tests.
- */
-function shade(color: string, factor: number): string {
-  let out = '#'
-  for (let i = 1; i < 7; i += 2) {
-    const channel = Math.floor(parseInt(color.slice(i, i + 2), 16) * factor)
-    out += Math.max(0, Math.min(255, channel))
-      .toString(16)
-      .padStart(2, '0')
-  }
-  return out
-}
+/** The profile slab's authored shade — between the two wall factors, since
+ * the slab faces the camera squarer than either wall. The wall factors
+ * themselves come from @engine/tilemap: they ARE the renderer's lighting
+ * convention, imported so a retune there re-lights every authored tileset. */
+const PROFILE_SIDE_SHADE = 0.7
 
 /**
- * One terrain tile with all four faces authored: the top color is the tile's
+ * One tile with all four faces authored: the top color is the tile's
  * identity; the iso walls take the renderer's own lighting convention (south
  * face dark, east face lighter — lit from the north-west) and the profile
  * slab sits between. Explicit shades make the iso and profile lenses look
  * intentional rather than like fallbacks — a kid flipping projections should
  * see a designed world in every one.
+ *
+ * Exported because every authored tileset (the terrain below, the bear
+ * portrait and figure in fixtures.ts) must shade its walls identically, and
+ * one function is how "identically" survives a retune.
  */
-function terrainTile(name: string, top: string): TileDef {
+export function facedTile(name: string, top: string): TileDef {
   return {
     name,
-    colors: { top, left: shade(top, 0.55), right: shade(top, 0.75), side: shade(top, 0.7) },
+    colors: {
+      top,
+      left: shadeHex(top, SOUTH_WALL_SHADE),
+      right: shadeHex(top, EAST_WALL_SHADE),
+      side: shadeHex(top, PROFILE_SIDE_SHADE),
+    },
   }
 }
 
@@ -74,11 +71,11 @@ function terrainTileset(): Tileset {
     id: 'terrain',
     name: 'terrain',
     tiles: [
-      terrainTile('grass', '#4a7c3a'),
-      terrainTile('water', '#2b6cb0'),
-      terrainTile('sand', '#d9b26b'),
-      terrainTile('stone', '#8a8f98'),
-      terrainTile('path', '#b58e5a'),
+      facedTile('grass', '#4a7c3a'),
+      facedTile('water', '#2b6cb0'),
+      facedTile('sand', '#d9b26b'),
+      facedTile('stone', '#8a8f98'),
+      facedTile('path', '#b58e5a'),
     ],
   }
 }

@@ -112,12 +112,16 @@ function entityToDoc(entity: Entity): Record<string, unknown> {
 }
 
 function layerToDoc(layer: TileLayer): Record<string, unknown> {
+  // `base` is written only when present — omitted here, its value is
+  // `undefined`, and printObject (below) already skips undefined entries,
+  // so an unbased layer's bytes are untouched by this field's existence.
   return {
     id: layer.id,
     name: layer.name,
     width: layer.width,
     height: layer.height,
     elevation: layer.elevation,
+    base: layer.base,
     layerBand: layer.layerBand,
     tilesetId: layer.tilesetId,
     cells: Array.from(layer.cells),

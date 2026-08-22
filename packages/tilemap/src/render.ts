@@ -107,9 +107,14 @@ const MISSING_TILE: TileDef = { name: 'missing tile', colors: { top: '#ff00ff' }
  * east face catches that light at a graze and stays lighter. Multiplying
  * each RGB channel by the same factor darkens without changing hue — the
  * cheapest believable shadow.
+ *
+ * EXPORTED because these two factors ARE the engine's lighting convention:
+ * everything that authors or derives wall colors (the editor's tilesets,
+ * its figurine miniatures) must shade identically to these walls, and one
+ * pair of constants is how "identically" survives a retune.
  */
-const SOUTH_WALL_SHADE = 0.55
-const EAST_WALL_SHADE = 0.75
+export const SOUTH_WALL_SHADE = 0.55
+export const EAST_WALL_SHADE = 0.75
 
 /** Draws one tile layer: cached blit when it can, per-tile commands when it must. */
 export interface LayerRenderer {
@@ -149,9 +154,10 @@ interface PaintSurface {
 /**
  * Darken a #rgb or #rrggbb color by multiplying each channel by `factor`.
  * Anything unparseable passes through unchanged — a wrong shade is a
- * cosmetic bug, not a crash.
+ * cosmetic bug, not a crash. Exported with the wall-shade factors above:
+ * one shading function, however many call sites.
  */
-function shadeHex(color: string, factor: number): string {
+export function shadeHex(color: string, factor: number): string {
   if (!color.startsWith('#')) return color
   const hex = color.slice(1)
   if ((hex.length !== 3 && hex.length !== 6) || !/^[0-9a-fA-F]+$/.test(hex)) return color
@@ -189,19 +195,33 @@ export function createLayerRenderer(options: LayerRendererOptions): LayerRendere
   const projectCell = (gx: number, gy: number, z: number): Vec2 =>
     project(gx * tileSize, gy * tileSize, z)
 
+  // ---- The slab reading, computed once and shared by the bounding box AND
+  // both the iso and profile painters below, so the three can never drift
+  // apart on what "this layer's z range" means. ----
+  //
+  // `base` absent is EXACTLY today's behavior: iso walls drop to the ground
+  // (z = 0), profile draws a thin plate resting ON elevation. `base` present
+  // turns the layer into a slab — iso walls drop to `base` instead of 0, and
+  // profile draws the full slab `[base, elevation]` (see TileLayer.base,
+  // @engine/core, for why: a stack of layers needs each one's walls to stop
+  // at the layer below, not paint straight through it to the ground).
+  const wallBottom = layer.base ?? 0
+  const profileZBottom = layer.base ?? layer.elevation
+  const profileZTop = layer.base !== undefined ? layer.elevation : layer.elevation + PROFILE_SLAB_HEIGHT
+
   // ---- The view-plane bounding box of everything this layer can draw. ----
   //
   // The projection is affine, so extremes can only happen at corners: the
   // four corners of the layer's world rectangle (grid corners × tileSize —
   // the TRUE world extent, which is what the cache raster must cover), at
   // the lowest and highest z its geometry touches (iso walls drop from the
-  // elevation to the ground; profile slabs rise PROFILE_SLAB_HEIGHT above
-  // it; top-down is flat).
+  // elevation to wallBottom; profile spans [profileZBottom, profileZTop];
+  // top-down is flat).
   const zExtents: number[] =
     projection.name === 'profile'
-      ? [layer.elevation, layer.elevation + PROFILE_SLAB_HEIGHT]
-      : projection.name === 'iso' && layer.elevation > 0
-        ? [0, layer.elevation]
+      ? [profileZBottom, profileZTop]
+      : projection.name === 'iso' && layer.elevation > wallBottom
+        ? [wallBottom, layer.elevation]
         : [layer.elevation]
 
   let viewMinX = Infinity
@@ -324,6 +344,12 @@ export function createLayerRenderer(options: LayerRendererOptions): LayerRendere
    * a step north goes away) — walking diagonal by diagonal, so every cell's
    * walls are painted before any cell in front of it (further east or south)
    * covers their shared pixels. Painter's algorithm, inside a single layer.
+   *
+   * Walls drop from `elevation` to `wallBottom` (= `layer.base ?? 0` —
+   * TileLayer.base's plateau-vs-slab reading, see @engine/core): a plain
+   * plateau still drops to the ground exactly as before, while a slab's
+   * walls stop at its own base instead of painting through whatever sits
+   * beneath it.
    */
   function paintIso(surface: PaintSurface): void {
     const e = layer.elevation
@@ -339,7 +365,7 @@ export function createLayerRenderer(options: LayerRendererOptions): LayerRendere
         const value = getCell(layer, tx, ty)
         if (value === 0) continue
         const tile = tileFor(value)
-        if (e > 0) {
+        if (e > wallBottom) {
           // getCell answers 0 both for empty cells and for coordinates off
           // the map — exactly the two cases where the face is exposed.
           if (getCell(layer, tx, ty - 1) === 0) {
@@ -347,8 +373,8 @@ export function createLayerRenderer(options: LayerRendererOptions): LayerRendere
             surface.poly(south, [
               projectCell(tx, ty, e),
               projectCell(tx + 1, ty, e),
-              projectCell(tx + 1, ty, 0),
-              projectCell(tx, ty, 0),
+              projectCell(tx + 1, ty, wallBottom),
+              projectCell(tx, ty, wallBottom),
             ])
           }
           if (getCell(layer, tx + 1, ty) === 0) {
@@ -356,8 +382,8 @@ export function createLayerRenderer(options: LayerRendererOptions): LayerRendere
             surface.poly(east, [
               projectCell(tx + 1, ty, e),
               projectCell(tx + 1, ty + 1, e),
-              projectCell(tx + 1, ty + 1, 0),
-              projectCell(tx + 1, ty, 0),
+              projectCell(tx + 1, ty + 1, wallBottom),
+              projectCell(tx + 1, ty, wallBottom),
             ])
           }
         }
@@ -381,10 +407,16 @@ export function createLayerRenderer(options: LayerRendererOptions): LayerRendere
    * the column's color, exactly as a painter's sort of the individual cells
    * would have. y = 0 goes into the projection below only because SOME y
    * must; any other value lands identically.
+   *
+   * The slab spans `[profileZBottom, profileZTop]` — a plain layer (no
+   * `base`) gets exactly the historical thin plate resting ON `elevation`;
+   * a based layer gets its FULL height `[base, elevation]` instead, which is
+   * what keeps a stack of layers reading as a solid column rather than a set
+   * of venetian blinds (see TileLayer.base, @engine/core).
    */
   function paintProfile(surface: PaintSurface): void {
-    const zBottom = layer.elevation
-    const zTop = layer.elevation + PROFILE_SLAB_HEIGHT
+    const zBottom = profileZBottom
+    const zTop = profileZTop
     for (let tx = 0; tx < layer.width; tx += 1) {
       let tile: TileDef | null = null
       for (let ty = 0; ty < layer.height; ty += 1) {

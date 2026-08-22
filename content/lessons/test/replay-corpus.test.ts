@@ -31,9 +31,10 @@
  * ## The fixture stand-in, on purpose
  *
  * This host's loadFixture returns FALSE for every id — the corpus has no
- * 'showcase-island' (fixtures are app assets). Lesson 03 must complete
- * anyway, and the test asserts it does: a fixture lesson gates every step
- * on events precisely so it survives a host that cannot stage its island
+ * 'showcase-island', 'bear-portrait-start', or 'bear-figure-start' (fixtures
+ * are app assets). Lessons 00, 'the-third-number', and 03 must complete
+ * anyway, and the tests assert they do: a fixture lesson gates every step on
+ * events precisely so it survives a host that cannot stage its scenery
  * (lessons.test.ts pins that rule for all fixture lessons).
  */
 
@@ -54,6 +55,15 @@ const GRASS = 1
 const WATER = 2
 const SAND = 3
 const STONE = 4
+
+/** The 'portrait' tileset's locked values this corpus's paint events name
+ * (IMPLEMENTATION-NOTES' palette table; apps/editor/src/editor/fixtures.ts
+ * is the one true copy). Mirrors GRASS/WATER/SAND/STONE above — named so a
+ * paint beat below reads as "chick yellow", not a bare 2. */
+const CHICK_YELLOW = 2
+const BEAK_ORANGE = 3
+const INK_BLACK = 5
+const FLOOR_LIGHT = 6
 
 /** The pinned pond box (tx 5–8, ty 4–6); its one-cell rim is sand. */
 const inPond = (tx: number, ty: number): boolean => tx >= 5 && tx <= 8 && ty >= 4 && ty <= 6
@@ -104,7 +114,10 @@ const CRATE_ID: EntityId = 'e2'
 // Script-building helpers (each returns the mutate-then-announce PAIR)
 // ---------------------------------------------------------------------------
 
-/** One completed brush gesture: write the cell, announce tile-painted. */
+/** One completed brush gesture: write the cell, announce tile-painted. The
+ * announcement half delegates to {@link paintEventBeat} so the corpus holds
+ * exactly ONE definition of the frozen tile-painted payload — a field added
+ * to the vocabulary gets added in one place or the type checker objects. */
 function paintBeat(tx: number, ty: number, tile: number): ReplayAction[] {
   return [
     {
@@ -115,10 +128,7 @@ function paintBeat(tx: number, ty: number, tile: number): ReplayAction[] {
         layer.cells[ty * layer.width + tx] = tile
       },
     },
-    {
-      kind: 'event',
-      event: { type: 'builder.tile-painted', layerId: 'ground', tile, cells: [{ tx, ty }], toolId: 'brush' },
-    },
+    paintEventBeat('ground', tile, tx, ty),
   ]
 }
 
@@ -169,6 +179,22 @@ function moveCrateBeat(from: { tx: number; ty: number }, to: { tx: number; ty: n
   ]
 }
 
+/**
+ * One event-only paint announcement — no mutate half. `paintBeat` writes
+ * `doc.layers[0]` because the starter-facts document only HAS the one
+ * ground layer; the 'bear-portrait-start' fixture's 'portrait' and 'floor'
+ * layers do not exist on this host's document at all (loadFixture returns
+ * false — see the header), so there is nothing to mutate. This announces
+ * exactly the event the editor's own brush stroke would raise, which is all
+ * a fixture lesson's step machine ever re-checks against.
+ */
+function paintEventBeat(layerId: string, tile: number, tx: number, ty: number): ReplayAction {
+  return {
+    kind: 'event',
+    event: { type: 'builder.tile-painted', layerId, tile, cells: [{ tx, ty }], toolId: 'brush' },
+  }
+}
+
 /** Saves and view switches change no world state: event-only beats. */
 const saveBeat: ReplayAction = {
   kind: 'event',
@@ -190,6 +216,50 @@ function viewBeat(from: 'profile' | 'topdown' | 'iso', to: 'profile' | 'topdown'
  * mechanical.
  */
 const corpus: Record<string, ReadonlyArray<ReplayAction>> = {
+  // Lesson 00 — coordinates, on the 'bear-portrait-start' fixture. Every
+  // beat is event-only, mirroring 'three-views' below: a fixture lesson
+  // gates every step on events precisely so it survives this fixture-less
+  // host, and there is no 'portrait'/'floor' layer on the starter-facts
+  // document to mutate in the first place.
+  'paint-by-numbers': [
+    // Step 1 (event: bare tile-painted — the freebie): the checkered
+    // floor, cell (0, 0) — deliberately NOT one of the four gated cells
+    // below, so this beat can never masquerade as one of them.
+    paintEventBeat('floor', FLOOR_LIGHT, 0, 0),
+    // Step 2 (event: tile-painted, where tile 5/'portrait', atCell (5, 8)): the first eye.
+    paintEventBeat('portrait', INK_BLACK, 5, 8),
+    // Step 3 (event: tile-painted, where tile 5/'portrait', atCell (10, 8)): the second eye.
+    paintEventBeat('portrait', INK_BLACK, 10, 8),
+    // Step 4 (event: tile-painted, where tile 5/'portrait', atCell (7, 15)): the top feather.
+    paintEventBeat('portrait', INK_BLACK, 7, 15),
+    // Step 5 (event: tile-painted, where tile 2/'portrait', atCell (3, 0)): the foot pad.
+    paintEventBeat('portrait', CHICK_YELLOW, 3, 0),
+    // Step 6 (event: view-projection-changed, topdown → iso): Pip stands up.
+    viewBeat('topdown', 'iso'),
+  ],
+
+  // 'the-third-number' — coordinates, on the 'bear-figure-start' fixture.
+  // Every beat is event-only, mirroring 'paint-by-numbers' above: a fixture
+  // lesson gates every step on events precisely so it survives this
+  // fixture-less host, and there is no 'z1'..'z10' layer on the
+  // starter-facts document to mutate in the first place.
+  'the-third-number': [
+    // Step 1 (event: tile-painted, where tile 2/'z1', atCell (6, 2)): the foot pad.
+    paintEventBeat('z1', CHICK_YELLOW, 6, 2),
+    // Step 2 (event: tile-painted, where tile 5/'z11', atCell (12, 9)): half the nose.
+    paintEventBeat('z11', INK_BLACK, 12, 9),
+    // Step 3 (event: tile-painted, where tile 3/'z14', atCell (13, 7)): the beak corner.
+    paintEventBeat('z14', BEAK_ORANGE, 13, 7),
+    // Step 4 (event: tile-painted, where tile 5/'z18', atCell (12, 13)): half the sprig.
+    paintEventBeat('z18', INK_BLACK, 12, 13),
+    // Step 5 (event: view-projection-changed, iso → profile): Pip in the round.
+    viewBeat('iso', 'profile'),
+    // Step 6 (event: view-projection-changed, profile → topdown): face on.
+    viewBeat('profile', 'topdown'),
+    // Step 7 (event: view-projection-changed, topdown → iso): three pictures, one Pip.
+    viewBeat('topdown', 'iso'),
+  ],
+
   // Arc 1 — coordinates, on the student's world.
   'first-tiles': [
     // Step 1 (event: any paint): stone somewhere neutral — deliberately NOT

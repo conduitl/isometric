@@ -6,7 +6,7 @@ import type { Engine } from '@engine/core'
 import { createIso } from '@engine/projection'
 import type { Projection } from '@engine/projection'
 import { createTileLayer, setCell } from '../src/layer'
-import { createLayerRenderer } from '../src/render'
+import { PROFILE_SLAB_HEIGHT, createLayerRenderer } from '../src/render'
 import type { LayerRenderer } from '../src/render'
 import { createOffscreenRasterFactory } from '../src/raster'
 import type { RasterFactory, RasterTarget } from '../src/raster'
@@ -417,6 +417,149 @@ describe('per-tile fallback (headless: raster.source === null)', () => {
         fill: '#40c040',
       },
     ])
+  })
+})
+
+describe('layer.base — the slab reading (see TileLayer.base, @engine/core)', () => {
+  it('iso: walls drop to `base` when present; absent still drops to 0 exactly as before (legacy pin)', () => {
+    const withBase = createTileLayer({
+      id: 'slab',
+      width: 1,
+      height: 1,
+      elevation: 5,
+      base: 4,
+      tilesetId: 'ts1',
+      cells: [1],
+    })
+    const noBase = createTileLayer({ id: 'plateau', width: 1, height: 1, elevation: 5, tilesetId: 'ts1', cells: [1] })
+
+    const slabCmds = drawOnce(
+      createLayerRenderer({
+        layer: withBase,
+        tileset,
+        projection: isoProjection,
+        raster: recordingRasterFactory(null).factory,
+      }),
+      Mat3.identity,
+    )
+    const plateauCmds = drawOnce(
+      createLayerRenderer({
+        layer: noBase,
+        tileset,
+        projection: isoProjection,
+        raster: recordingRasterFactory(null).factory,
+      }),
+      Mat3.identity,
+    )
+
+    expect(slabCmds).toHaveLength(3) // south, east, top — same shape as any raised cell
+    expect(plateauCmds).toHaveLength(3)
+
+    // South wall through project(x, y, z) = (x + y, (x − y)/2 − z): the top
+    // edge sits at elevation 5 either way, but the BOTTOM edge is base (4)
+    // for the slab, and the ground (0) for the legacy plateau — the one
+    // fact this field changes.
+    expect(must(slabCmds[0]).points).toEqual([
+      { x: 0, y: -5 }, // (0, 0, 5)
+      { x: 1, y: -4.5 }, // (1, 0, 5)
+      { x: 1, y: -3.5 }, // (1, 0, 4) — base, not 0
+      { x: 0, y: -4 }, // (0, 0, 4)
+    ])
+    expect(must(plateauCmds[0]).points).toEqual([
+      { x: 0, y: -5 }, // (0, 0, 5)
+      { x: 1, y: -4.5 }, // (1, 0, 5)
+      { x: 1, y: 0.5 }, // (1, 0, 0) — legacy: the ground
+      { x: 0, y: 0 }, // (0, 0, 0)
+    ])
+  })
+
+  it('iso: a slab whose height collapses to zero (base = elevation, caught upstream by the schema) draws no walls — the gate is `e > wallBottom`, not merely `e > 0`', () => {
+    const layer = createTileLayer({ id: 'l1', width: 1, height: 1, elevation: 3, base: 3, tilesetId: 'ts1', cells: [1] })
+    const { factory } = recordingRasterFactory(null)
+    const renderer = createLayerRenderer({ layer, tileset, projection: isoProjection, raster: factory })
+    const cmds = drawOnce(renderer, Mat3.identity)
+    expect(cmds).toHaveLength(1) // top face only, no walls
+    expect(must(cmds[0]).fill).toBe('#40c040')
+  })
+
+  it('profile: draws the FULL slab [base, elevation] when present; absent still draws the historical thin plate (legacy pin)', () => {
+    const withBase = createTileLayer({
+      id: 'slab',
+      width: 1,
+      height: 1,
+      elevation: 3,
+      base: 1,
+      tilesetId: 'ts1',
+      cells: [2],
+    })
+    const noBase = createTileLayer({ id: 'plateau', width: 1, height: 1, elevation: 3, tilesetId: 'ts1', cells: [2] })
+
+    const slabCmds = drawOnce(
+      createLayerRenderer({
+        layer: withBase,
+        tileset,
+        projection: profileProjection,
+        raster: recordingRasterFactory(null).factory,
+      }),
+      Mat3.identity,
+    )
+    const plateauCmds = drawOnce(
+      createLayerRenderer({
+        layer: noBase,
+        tileset,
+        projection: profileProjection,
+        raster: recordingRasterFactory(null).factory,
+      }),
+      Mat3.identity,
+    )
+
+    // profileProjection: project(x, y, z) = (x, −z). Stone has a side color,
+    // so both slabs paint '#585858'.
+    expect(slabCmds).toEqual([
+      {
+        kind: 'polyline',
+        points: [
+          { x: 0, y: -3 }, // top: (0, 0, 3) — elevation
+          { x: 1, y: -3 },
+          { x: 1, y: -1 }, // bottom: (1, 0, 1) — base: the FULL slab
+          { x: 0, y: -1 },
+        ],
+        fill: '#585858',
+      },
+    ])
+    expect(plateauCmds).toEqual([
+      {
+        kind: 'polyline',
+        points: [
+          { x: 0, y: -(3 + PROFILE_SLAB_HEIGHT) }, // top: elevation + the historical plate height
+          { x: 1, y: -(3 + PROFILE_SLAB_HEIGHT) },
+          { x: 1, y: -3 }, // bottom: elevation itself — legacy, unchanged
+          { x: 0, y: -3 },
+        ],
+        fill: '#585858',
+      },
+    ])
+  })
+
+  it('sizes the iso cache raster to the true z-range — a based layer needs LESS height than the plateau it replaces', () => {
+    // width = height = 1, elevation 5. The based layer's walls span [4, 5];
+    // the legacy plateau's span [0, 5] — five times the height — so the
+    // based raster is visibly shorter, proving zExtents tracks wallBottom,
+    // not a hardcoded 0.
+    const withBase = createTileLayer({ id: 'slab', width: 1, height: 1, elevation: 5, base: 4, tilesetId: 'ts1' })
+    const noBase = createTileLayer({ id: 'plateau', width: 1, height: 1, elevation: 5, tilesetId: 'ts1' })
+
+    const slab = recordingRasterFactory(fakeSource)
+    createLayerRenderer({ layer: withBase, tileset, projection: isoProjection, raster: slab.factory })
+    const plateau = recordingRasterFactory(fakeSource)
+    createLayerRenderer({ layer: noBase, tileset, projection: isoProjection, raster: plateau.factory })
+
+    // Based: z ∈ {4, 5}. Ground corners at both z's land in view
+    // x ∈ [0, 2], y ∈ [−5.5, −3.5] (2×2 view units) → 32×32 at 16 px/unit.
+    expect([must(slab.rasters[0]).width, must(slab.rasters[0]).height]).toEqual([32, 32])
+    // Plateau: z ∈ {0, 5} — the same ground box but 5 units of z-height
+    // instead of 1, so view y spans [−5.5, 0.5] (6 units) → 96 px tall.
+    expect([must(plateau.rasters[0]).width, must(plateau.rasters[0]).height]).toEqual([32, 96])
   })
 })
 

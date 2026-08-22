@@ -45,6 +45,7 @@ import type { Entity, World } from '@engine/core'
 import { produceWithPatches } from 'immer'
 import type { Patch } from 'immer'
 import type { BuilderEvent } from '../events/builder'
+import { PIP_FIGURINE } from '../figurine'
 import type {
   DeleteEntityCommand,
   EditorCommand,
@@ -110,6 +111,15 @@ function readMarker(entity: Entity): string | null {
 /**
  * Spawn a marker entity. Never rejects and never no-ops: the document's own
  * counter mints the id, so there is nothing stale to collide with.
+ *
+ * One marker kind gets an extra component: 'pip' — the app's one built-in
+ * FIGURINE (figurine.ts) — carries `figurine: PIP_FIGURINE` alongside the
+ * usual trio, which is what turns the renderer's dot into a voxel miniature
+ * (render.ts's drawMarker) and rides through save/load for free (components
+ * are opaque, JSON-serializable data at the file boundary — @engine/core's
+ * World doc comment). Every other marker kind is unaffected; this is the one
+ * place a marker's KIND changes what gets spawned, and it stays exactly one
+ * `if`, not a lookup table, because v1 ships exactly one figurine.
  */
 export function placeEntity(doc: World, command: PlaceEntityCommand): CommandOutcome {
   // Minted from the BASE document, before produce — see the file header.
@@ -124,6 +134,7 @@ export function placeEntity(doc: World, command: PlaceEntityCommand): CommandOut
         position: { x: command.position.x, y: command.position.y },
         elevation: { z: command.elevation },
         marker: { kind: command.marker },
+        ...(command.marker === 'pip' ? { figurine: PIP_FIGURINE } : {}),
       },
     })
   })

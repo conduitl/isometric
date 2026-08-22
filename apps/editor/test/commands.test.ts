@@ -18,10 +18,11 @@ import type { World } from '@engine/core'
 import { createRng } from '@engine/math'
 import type { Rng } from '@engine/math'
 import { createTileLayer } from '@engine/tilemap'
-import { serializeWorld } from '@engine/world-format'
+import { parseWorld, serializeWorld } from '@engine/world-format'
 import { describe, expect, it } from 'vitest'
 import { createCommandBus } from '../src/editor/commands/bus'
 import type { BuilderEvent } from '../src/editor/events/builder'
+import { PIP_FIGURINE } from '../src/editor/figurine'
 import type { DocumentHost, EditorCommand } from '../src/editor/types'
 
 // --- rig: a plain document host + bus + event log --------------------------
@@ -390,5 +391,47 @@ describe('history stacks', () => {
     events.length = 0
     bus.dispatch({ kind: 'place-entity', marker: 'tree', position: { x: 1, y: 1 }, elevation: 0 })
     expect((events[0] as { id: string }).id).toBe(placed.id) // same id, freshly minted
+  })
+})
+
+// --- the pip figurine: one marker kind that carries an extra component -----
+
+describe('the pip figurine', () => {
+  it("placing 'pip' attaches figurine: PIP_FIGURINE alongside the usual trio", () => {
+    const { host, bus } = createRig(createWorld())
+    const result = bus.dispatch({ kind: 'place-entity', marker: 'pip', position: { x: 2, y: 3 }, elevation: 0 })
+    expect(result).toEqual({ ok: true, label: 'place pip' })
+
+    const pip = host.doc.entities['e1']
+    if (pip === undefined) throw new Error('pip was not placed')
+    expect(pip.components).toEqual({
+      position: { x: 2, y: 3 },
+      elevation: { z: 0 },
+      marker: { kind: 'pip' },
+      figurine: PIP_FIGURINE,
+    })
+
+    // Every OTHER marker kind is unaffected — no figurine component rides
+    // along uninvited.
+    bus.dispatch({ kind: 'place-entity', marker: 'crate', position: { x: 0, y: 0 }, elevation: 0 })
+    const crate = host.doc.entities['e2']
+    expect(crate?.components['figurine']).toBeUndefined()
+  })
+
+  it('the placed figurine component survives a save/load round trip byte-for-byte', () => {
+    const { host, bus } = createRig(createWorld())
+    bus.dispatch({ kind: 'place-entity', marker: 'pip', position: { x: 4, y: 4 }, elevation: 0 })
+
+    const text = serializeWorld(host.doc)
+    const parsed = parseWorld(text)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+
+    const pip = parsed.world.entities['e1']
+    if (pip === undefined) throw new Error('pip did not survive the round trip')
+    expect(pip.components['figurine']).toEqual(PIP_FIGURINE)
+    // And re-serializing lands on the exact same bytes — the whole point of
+    // components being opaque, JSON-serializable data at the file boundary.
+    expect(serializeWorld(parsed.world)).toBe(text)
   })
 })

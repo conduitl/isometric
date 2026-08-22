@@ -51,6 +51,9 @@ export interface CreateTileLayerOptions {
   layerBand?: number
   tilesetId: string
   cells?: ArrayLike<number>
+  /** The slab's bottom — see {@link TileLayer.base} (@engine/core) for the
+   * full plateau-vs-slab story. Omit it for exactly today's behavior. */
+  base?: number
 }
 
 /**
@@ -61,6 +64,11 @@ export interface CreateTileLayerOptions {
  * Defaults: name = the id, elevation 0, layerBand 0. Values outside the
  * uint16 range 0..65535 wrap silently (that is what the typed array does) —
  * the schema layer above is where out-of-range tile ids get diagnosed.
+ *
+ * `base` is stored ONLY when the caller provides it — an omitted `base`
+ * means the returned layer has no `base` key at all, not a `base: undefined`
+ * key, so a layer built exactly as it was before this option existed comes
+ * out byte-for-byte the same object shape.
  */
 export function createTileLayer(options: CreateTileLayerOptions): TileLayer {
   const { id, width, height } = options
@@ -102,6 +110,7 @@ export function createTileLayer(options: CreateTileLayerOptions): TileLayer {
     layerBand: options.layerBand ?? 0,
     tilesetId: options.tilesetId,
     cells,
+    ...(options.base === undefined ? {} : { base: options.base }),
   }
 }
 

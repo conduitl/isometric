@@ -141,6 +141,20 @@ quarantined leaf packages.
 
 ---
 
+## Post-v1 direction — characters as worlds (recorded Aug 2026)
+
+The asset pipeline the first-lesson arc seeded: a character is authored as a
+world (the Pip portrait and voxel-figure fixtures), converted by
+`figurineFromWorld` into a self-contained one-cell **figurine** an entity
+carries, and placed in any other world. The phased continuation, in order:
+**animate** him (a figurine per pose — the component is opaque data, so this
+is additive), **move** him (a mover system over the same three-number
+position every lesson teaches), then **interact** with the world. Each phase
+is also curriculum: poses are frames, movement is the two-numbers-changing
+lesson at runtime, interaction is events.
+
+---
+
 ## Governance rules (as binding as the phases)
 
 1. **Budget breaches:** any phase exceeding 150% of its week budget triggers a cut from a pre-ranked
